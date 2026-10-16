@@ -1,0 +1,19 @@
+services:
+  ghatv:
+    build: .
+    image: ghatv:latest
+    restart: unless-stopped
+    # Порт доступен только с этого компьютера
+    ports:
+      - "127.0.0.1:7681:7681"
+    environment:
+      GH_TOKEN: ${GH_TOKEN:?GH_TOKEN не задан}
+      TZ: ${TZ:-Europe/Moscow}
+      GHATV_AFFILIATION: ${GHATV_AFFILIATION:-owner}
+      GHATV_RUNS_PER_REPO: ${GHATV_RUNS_PER_REPO:-20}
+      GHATV_INTERVAL: ${GHATV_INTERVAL:-60}
+      GHATV_ACTIVE_INTERVAL: ${GHATV_ACTIVE_INTERVAL:-10}
+      GHATV_INCLUDE_FORKS: ${GHATV_INCLUDE_FORKS:-false}
+      GHATV_OWNERS: ${GHATV_OWNERS:-}
+      GHATV_REPOS: ${GHATV_REPOS:-}
+      GHATV_EXCLUDE: ${GHATV_EXCLUDE:-}
