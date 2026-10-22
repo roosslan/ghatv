@@ -34,6 +34,7 @@ Run parseRun(const json &j, const std::string &repo)
     r.workflow = str(j, "name");
     r.title = str(j, "display_title");
     r.branch = str(j, "head_branch");
+    r.headSha = str(j, "head_sha");
     r.event = str(j, "event");
     r.status = str(j, "status");
     r.conclusion = str(j, "conclusion");
@@ -50,6 +51,56 @@ Run parseRun(const json &j, const std::string &repo)
     if (nl != std::string::npos)
         r.title.resize(nl);
     return r;
+}
+
+std::vector<std::string> labelNames(const json &j)
+{
+    std::vector<std::string> out;
+    if (j.contains("labels") && j["labels"].is_array())
+        for (auto &l : j["labels"])
+            if (l.is_object())
+                out.push_back(str(l, "name"));
+    return out;
+}
+
+Issue parseIssue(const json &j, const std::string &repo)
+{
+    Issue is;
+    is.id = num(j, "id");
+    is.number = (int) num(j, "number");
+    is.repo = repo;
+    is.title = str(j, "title");
+    is.url = str(j, "html_url");
+    is.comments = (int) num(j, "comments");
+    is.createdAt = util::parseIso(str(j, "created_at"));
+    is.updatedAt = util::parseIso(str(j, "updated_at"));
+    is.labels = labelNames(j);
+    if (j.contains("user") && j["user"].is_object())
+        is.author = str(j["user"], "login");
+    return is;
+}
+
+PullRequest parsePull(const json &p, const std::string &repo)
+{
+    PullRequest pr;
+    pr.id = num(p, "id");
+    pr.number = (int) num(p, "number");
+    pr.repo = repo;
+    pr.title = str(p, "title");
+    pr.url = str(p, "html_url");
+    pr.draft = p.value("draft", false);
+    pr.createdAt = util::parseIso(str(p, "created_at"));
+    pr.updatedAt = util::parseIso(str(p, "updated_at"));
+    if (p.contains("user") && p["user"].is_object())
+        pr.author = str(p["user"], "login");
+    if (p.contains("head") && p["head"].is_object())
+    {
+        pr.headRef = str(p["head"], "ref");
+        pr.headSha = str(p["head"], "sha");
+    }
+    if (p.contains("base") && p["base"].is_object())
+        pr.baseRef = str(p["base"], "ref");
+    return pr;
 }
 
 size_t writeCb(char *ptr, size_t size, size_t nmemb, void *userdata)
@@ -100,6 +151,60 @@ CURL *threadHandle()
 }
 
 } // namespace
+
+namespace ghparse
+{
+
+std::vector<Run> runs(const std::string &body, const std::string &repo)
+{
+    std::vector<Run> out;
+    auto j = json::parse(body);
+    if (j.contains("workflow_runs") && j["workflow_runs"].is_array())
+        for (auto &r : j["workflow_runs"])
+            out.push_back(parseRun(r, repo));
+    return out;
+}
+
+std::vector<PullRequest> pulls(const std::string &body, const std::string &repo)
+{
+    std::vector<PullRequest> out;
+    auto j = json::parse(body);
+    if (j.is_array())
+        for (auto &p : j)
+            out.push_back(parsePull(p, repo));
+    return out;
+}
+
+std::vector<Issue> issues(const std::string &body, const std::string &repo)
+{
+    std::vector<Issue> out;
+    auto j = json::parse(body);
+    if (j.is_array())
+        for (auto &i : j)
+            if (!i.contains("pull_request"))  // список issues включает и PR
+                out.push_back(parseIssue(i, repo));
+    return out;
+}
+
+std::vector<Issue> searchIssues(const std::string &body)
+{
+    std::vector<Issue> out;
+    auto j = json::parse(body);
+    if (j.contains("items") && j["items"].is_array())
+        for (auto &i : j["items"])
+            if (!i.contains("pull_request"))
+                out.push_back(parseIssue(i, repoFromUrl(str(i, "repository_url"))));
+    return out;
+}
+
+std::string repoFromUrl(const std::string &url)
+{
+    const std::string prefix = "/repos/";
+    auto pos = url.find(prefix);
+    return pos == std::string::npos ? url : url.substr(pos + prefix.size());
+}
+
+} // namespace ghparse
 
 GitHub::GitHub(std::string token, std::string apiBase) :
     token_(std::move(token)),
@@ -283,13 +388,228 @@ bool GitHub::listRuns(const std::string &repo, int perPage, std::vector<Run> &ou
     }
     if (res.fromCache)
         return true;
+    try
+    {
+        out = ghparse::runs(res.body, repo);
+    }
+    catch (const std::exception &e)
+    {
+        err = e.what();
+        return false;
+    }
     changed = true;
-    out.clear();
+    return true;
+}
+
+bool GitHub::listPulls(const std::string &repo, std::vector<PullRequest> &out, bool &changed, std::string &err)
+{
+    changed = false;
+    auto res = request("GET", "/repos/" + repo + "/pulls?state=open&per_page=100", true);
+    if (res.status == 404)
+    {
+        changed = true;
+        out.clear();
+        return true;
+    }
+    if (!res.error.empty())
+    {
+        err = res.error;
+        return false;
+    }
+    if (res.fromCache)
+        return true;
+    try
+    {
+        out = ghparse::pulls(res.body, repo);
+    }
+    catch (const std::exception &e)
+    {
+        err = e.what();
+        return false;
+    }
+    changed = true;
+    return true;
+}
+
+bool GitHub::currentUser(std::string &login, std::string &err)
+{
+    auto res = request("GET", "/user");
+    if (!res.error.empty())
+    {
+        err = res.error;
+        return false;
+    }
+    try
+    {
+        login = str(json::parse(res.body), "login");
+    }
+    catch (const std::exception &e)
+    {
+        err = e.what();
+        return false;
+    }
+    return !login.empty();
+}
+
+bool GitHub::listIssues(const std::string &repo, std::vector<Issue> &out, bool &changed, std::string &err)
+{
+    changed = false;
+    auto res = request("GET", "/repos/" + repo + "/issues?state=open&per_page=100", true);
+    // 410: issues в репозитории отключены
+    if (res.status == 404 || res.status == 410)
+    {
+        changed = true;
+        out.clear();
+        return true;
+    }
+    if (!res.error.empty())
+    {
+        err = res.error;
+        return false;
+    }
+    if (res.fromCache)
+        return true;
+    try
+    {
+        out = ghparse::issues(res.body, repo);
+    }
+    catch (const std::exception &e)
+    {
+        err = e.what();
+        return false;
+    }
+    changed = true;
+    return true;
+}
+
+bool GitHub::searchIssues(const std::string &q, std::vector<Issue> &out, bool &changed, std::string &err)
+{
+    changed = false;
+    std::string enc;
+    for (char c : q)
+        enc += c == ' ' ? std::string("+") : std::string(1, c);
+    auto res = request("GET", "/search/issues?per_page=100&sort=updated&q=" + enc, true);
+    if (!res.error.empty())
+    {
+        err = res.error;
+        return false;
+    }
+    if (res.fromCache)
+        return true;
+    try
+    {
+        out = ghparse::searchIssues(res.body);
+    }
+    catch (const std::exception &e)
+    {
+        err = e.what();
+        return false;
+    }
+    changed = true;
+    return true;
+}
+
+bool GitHub::discussion(const std::string &repo, int number, Discussion &out, std::string &err)
+{
+    std::string base = "/repos/" + repo + "/issues/" + std::to_string(number);
+    auto res = request("GET", base);
+    if (!res.error.empty())
+    {
+        err = res.error;
+        return false;
+    }
     try
     {
         auto j = json::parse(res.body);
-        for (auto &r : j["workflow_runs"])
-            out.push_back(parseRun(r, repo));
+        out.title = str(j, "title");
+        out.state = str(j, "state");
+        out.body = str(j, "body");
+        out.labels = labelNames(j);
+        out.createdAt = util::parseIso(str(j, "created_at"));
+        if (j.contains("user") && j["user"].is_object())
+            out.author = str(j["user"], "login");
+    }
+    catch (const std::exception &e)
+    {
+        err = e.what();
+        return false;
+    }
+    out.comments.clear();
+    for (int page = 1; page < 10; ++page)
+    {
+        auto cr = request("GET", base + "/comments?per_page=100&page=" + std::to_string(page));
+        if (!cr.error.empty())
+        {
+            err = cr.error;
+            return false;
+        }
+        size_t got = 0;
+        try
+        {
+            for (auto &c : json::parse(cr.body))
+            {
+                ++got;
+                Comment cm;
+                cm.body = str(c, "body");
+                cm.createdAt = util::parseIso(str(c, "created_at"));
+                if (c.contains("user") && c["user"].is_object())
+                    cm.author = str(c["user"], "login");
+                out.comments.push_back(std::move(cm));
+            }
+        }
+        catch (const std::exception &e)
+        {
+            err = e.what();
+            return false;
+        }
+        if (got < 100)
+            break;
+    }
+    return true;
+}
+
+bool GitHub::pullDetails(const std::string &repo, int number, PullDetails &out, std::string &err)
+{
+    auto res = request("GET", "/repos/" + repo + "/pulls/" + std::to_string(number));
+    if (!res.error.empty())
+    {
+        err = res.error;
+        return false;
+    }
+    try
+    {
+        auto j = json::parse(res.body);
+        out.body = str(j, "body");
+        out.mergeableState = str(j, "mergeable_state");
+        out.comments = (int) num(j, "comments");
+        out.reviewComments = (int) num(j, "review_comments");
+        out.commits = (int) num(j, "commits");
+        out.additions = (int) num(j, "additions");
+        out.deletions = (int) num(j, "deletions");
+        out.changedFiles = (int) num(j, "changed_files");
+    }
+    catch (const std::exception &e)
+    {
+        err = e.what();
+        return false;
+    }
+    return true;
+}
+
+bool GitHub::runsForSha(const std::string &repo, const std::string &sha, std::vector<Run> &out, std::string &err)
+{
+    out.clear();
+    auto res = request("GET", "/repos/" + repo + "/actions/runs?per_page=100&head_sha=" + sha);
+    if (res.status == 404)
+        return true;
+    if (!res.error.empty())
+    {
+        err = res.error;
+        return false;
+    }
+    try
+    {
+        out = ghparse::runs(res.body, repo);
     }
     catch (const std::exception &e)
     {

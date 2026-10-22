@@ -1,7 +1,10 @@
 #define Uses_TObject
 #include "github.h"
+#include "issues_window.h"
 #include "log_window.h"
 #include "poller.h"
+#include "pull_window.h"
+#include "pulls_window.h"
 #include "run_window.h"
 #include "runs_window.h"
 #include "ui.h"
@@ -72,6 +75,7 @@ public:
 
     void idle() override;
     void handleEvent(TEvent &ev) override;
+    void getEvent(TEvent &ev) override;
 
     GitHub &gh() override { return gh_; }
     Poller &poller() override { return poller_; }
@@ -81,11 +85,15 @@ public:
     void openFirstLog(const Run &run) override;
     void openLog(const std::string &repo, int64_t jobId, const std::string &title, const std::string &jump) override;
     void runAction(RunAction a, std::vector<Run> runs, std::function<void(bool)> onDone) override;
+    void openPull(const PullRequest &pr) override;
+    void openDiscussion(const std::string &repo, int number, const std::string &title) override;
 
 private:
     GitHub &gh_;
     Poller &poller_;
     RunsWindow *runs_;
+    PullsWindow *pulls_;
+    IssuesWindow *issues_;
     std::mutex qm_;
     std::deque<std::function<void()>> queue_;
     uint64_t seenVersion_ = 0;
@@ -99,6 +107,10 @@ GhApp::GhApp(GitHub &gh, Poller &poller, std::string startupError) :
 {
     // Окна обращаются к gApp уже при вставке (отрисовка)
     gApp = this;
+    issues_ = new IssuesWindow(deskTop->getExtent());
+    deskTop->insert(issues_);
+    pulls_ = new PullsWindow(deskTop->getExtent());
+    deskTop->insert(pulls_);
     runs_ = new RunsWindow(deskTop->getExtent());
     deskTop->insert(runs_);
     if (!startupError.empty())
@@ -123,6 +135,12 @@ TMenuBar *GhApp::initMenuBar(TRect r)
             *new TMenuItem("~П~оиск…", cmSearch, kbCtrlF, hcNoContext, "/") +
             *new TMenuItem("~Т~олько последние", cmLatestOnly, kbNoKey, hcNoContext, "L") +
             *new TMenuItem("С~о~ртировка", cmSortToggle, kbNoKey, hcNoContext, "S") +
+            newLine() +
+            *new TMenuItem("~З~апуски", cmShowRuns, kbNoKey, hcNoContext, "Alt-1") +
+            *new TMenuItem("Pull ~r~equest'ы", cmShowPulls, kbNoKey, hcNoContext, "Alt-2") +
+            *new TMenuItem("~I~ssues", cmShowIssues, kbNoKey, hcNoContext, "Alt-3") +
+            *new TMenuItem("Следующее о~к~но", cmNextMain, kbF2, hcNoContext, "F2") +
+            *new TMenuItem("Скрыть ~ч~ерновики PR", cmHideDrafts, kbNoKey, hcNoContext, "D") +
         *new TSubMenu("~З~апуск", kbAltR) +
             *new TMenuItem("~О~ткрыть", cmOpenRun, kbNoKey, hcNoContext, "Enter") +
             *new TMenuItem("~Л~ог", cmShowLog, kbF3, hcNoContext, "F3") +
@@ -146,6 +164,7 @@ TStatusLine *GhApp::initStatusLine(TRect r)
     return new TStatusLine(r,
         *new TStatusDef(0, 0xFFFF) +
             *new TStatusItem("~F1~ Справка", kbF1, cmKeysHelp) +
+            *new TStatusItem("~F2~ Окна", kbF2, cmNextMain) +
             *new TStatusItem("~F3~ Лог", kbF3, cmShowLog) +
             *new TStatusItem("~F5~ Перезапуск", kbF5, cmRerun) +
             *new TStatusItem("~F6~ Упавшие", kbF6, cmRerunFailed) +
@@ -189,7 +208,10 @@ void GhApp::idle()
     if (v != seenVersion_)
     {
         seenVersion_ = v;
-        runs_->updateData(poller_.snapshot());
+        auto st = poller_.snapshot();
+        issues_->updateData(st);
+        pulls_->updateData(st);
+        runs_->updateData(std::move(st));
     }
 
     // Раз в секунду перерисовать относительное время и индикаторы
@@ -211,16 +233,68 @@ void GhApp::handleEvent(TEvent &ev)
     case cmKeysHelp:
         showHelp();
         break;
+    case cmNextMain:
+        // Переключение по кругу между основными окнами; прочие окна остаются на месте
+        if (deskTop->current == runs_)
+            pulls_->select();
+        else if (deskTop->current == pulls_)
+            issues_->select();
+        else
+            runs_->select();
+        break;
+    case cmShowRuns:
+        runs_->select();
+        break;
+    case cmShowPulls:
+        pulls_->select();
+        break;
+    case cmShowIssues:
+        issues_->select();
+        break;
     case cmRefresh:
         poller_.refreshAll();
         break;
     case cmAbout:
-        msgBox("ghatv — панель GitHub Actions\nна Turbo Vision (magiblot/tvision)", mfInformation | mfOKButton);
+        msgBox("ghatv " GHATV_VERSION " — панель GitHub Actions\nна Turbo Vision (magiblot/tvision)\n\n"
+               "https://github.com/roosslan/ghatv",
+               mfInformation | mfOKButton);
         break;
     default:
         return;
     }
     clearEvent(ev);
+}
+
+void GhApp::getEvent(TEvent &ev)
+{
+    TApplication::getEvent(ev);
+    // Backspace работает как Esc («назад»), кроме диалогов, где он стирает текст.
+    // Диалог может быть и в приложении (inputBox), и на рабочем столе: проверить цепочку текущих
+    auto inDialog = [this] {
+        for (TView *v = current; v;)
+        {
+            if (dynamic_cast<TDialog *>(v))
+                return true;
+            auto *g = dynamic_cast<TGroup *>(v);
+            v = g ? g->current : nullptr;
+        }
+        return false;
+    };
+    if (ev.what == evKeyDown && ev.keyDown.keyCode == kbBack && !inDialog())
+    {
+        ev.keyDown.keyCode = kbEsc;
+        ev.keyDown.textLength = 0;
+    }
+}
+
+void GhApp::openPull(const PullRequest &pr)
+{
+    deskTop->insert(new PullWindow(deskTop->getExtent(), pr));
+}
+
+void GhApp::openDiscussion(const std::string &repo, int number, const std::string &title)
+{
+    deskTop->insert(new DiscussionWindow(deskTop->getExtent(), repo, number, title));
 }
 
 void GhApp::openRun(const Run &run)
@@ -359,6 +433,8 @@ int main()
     cfg.owners = util::splitList(util::env("GHATV_OWNERS"));
     cfg.include = util::splitList(util::env("GHATV_REPOS"));
     cfg.exclude = util::splitList(util::env("GHATV_EXCLUDE"));
+    cfg.pulls = util::envBool("GHATV_PULLS", true);
+    cfg.issues = util::envBool("GHATV_ISSUES", true);
 
     GitHub gh(token, util::env("GITHUB_API_URL", "https://api.github.com"));
     Poller poller(gh, cfg, [] { TEventQueue::wakeUp(); });

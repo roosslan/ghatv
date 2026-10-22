@@ -1,85 +1,51 @@
 #pragma once
 
 #include "poller.h"
-#include "ui.h"
+#include "table.h"
 
 #include <set>
 
-class RunsWindow;
-
-// Раскладка столбцов главной таблицы
-struct RunCols
-{
-    int status, repo, workflow, branch, event, title, dur, age;
-    static RunCols compute(int width);
-};
-
-class RunsHeader : public TView
-{
-public:
-    explicit RunsHeader(const TRect &r);
-    void draw() override;
-};
-
-class RunsInfo : public TView
-{
-public:
-    RunsInfo(const TRect &r, RunsWindow *w);
-    void draw() override;
-
-private:
-    RunsWindow *w_;
-};
-
-class RunsList : public TListViewer
-{
-public:
-    RunsList(const TRect &r, TScrollBar *vs, RunsWindow *w);
-    void draw() override;
-    void handleEvent(TEvent &ev) override;
-    void selectItem(short item) override;
-    void getText(char *dest, short item, short maxLen) override;
-
-private:
-    RunsWindow *w_;
-};
-
 enum class RunFilter { All, Active, Failed, Success, Other };
 
-class RunsWindow : public TWindow
+// Номер фильтра по клавише 1..5 (или -1)
+int filterKey(const TEvent &ev);
+// Совпадение категории с фильтром
+bool filterMatch(RunFilter f, RunCategory cat);
+// Текст статуса со значком: «✔ успех»
+Cell statusCell(const StatusLook &look);
+// Порядок статусов при сортировке: активные, упавшие, прочие, успешные
+int statusRank(const Run &r);
+
+class RunsWindow : public TableWindow
 {
 public:
     explicit RunsWindow(const TRect &r);
 
     void updateData(Poller::State st);
-    void tick();
-    void handleEvent(TEvent &ev) override;
 
-    int count() const { return (int) visible_.size(); }
-    const Run *runAt(int i) const;
-    const Run *current() const;
-    bool isMarked(int64_t id) const { return marked_.count(id) > 0; }
-    bool multiOwner() const { return multiOwner_; }
-    std::string infoText() const;
+    int dataCount() const override { return (int) st_.runs.size(); }
+    bool accept(int idx) const override;
+    Cell cell(int idx, int col) const override;
+    int compare(int a, int b, int col) const override;
+    int64_t rowId(int idx) const override { return st_.runs[idx].id; }
+    void postFilter(std::vector<int> &rows) const override;
+    std::string leadText(int idx, uchar &fore) const override;
+    bool marked(int idx) const override { return marked_.count(st_.runs[idx].id) > 0; }
+    std::string emptyText() const override { return "Нет запусков для отображения"; }
+    std::string infoText() const override;
 
-    void toggleMark(int i);
-    void setFilter(RunFilter f);
-    void doAction(RunAction a);
+    void openRow(int idx) override;
+    bool rowKey(TEvent &ev) override;
+    bool command(ushort cmd) override;
 
 private:
-    void rebuild();
+    void setFilter(RunFilter f);
+    void doAction(RunAction a);
     std::vector<Run> targets() const;
 
-    RunsHeader *header_;
-    RunsList *list_;
-    RunsInfo *info_;
-
     Poller::State st_;
-    std::vector<int> visible_;
     std::set<int64_t> marked_;
     RunFilter filter_ = RunFilter::All;
-    std::string search_;
     bool latestOnly_ = false;
-    bool sortByRepo_ = false;
     bool multiOwner_ = false;
 };

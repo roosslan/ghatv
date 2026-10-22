@@ -60,6 +60,11 @@ enum : ushort
     cmKeysHelp,
     cmAbout,
     cmTick,  // широковещательно раз в секунду
+    cmNextMain,  // следующее основное окно
+    cmShowRuns,
+    cmShowPulls,
+    cmShowIssues,
+    cmHideDrafts,
 };
 
 // Цвета (BIOS: старшая тетрада — фон, младшая — текст)
@@ -95,6 +100,12 @@ void putCell(TDrawBuffer &b, int x, int width, const std::string &text, TColorAt
 
 enum class RunAction { Rerun, RerunFailed, Cancel, Delete, DeleteLogs };
 
+// Последние запуски каждого workflow для текущего коммита PR
+std::vector<Run> runsOfPull(const std::vector<Run> &runs, const PullRequest &pr);
+// Сводный статус CI по запускам PR; пустой список — «нет CI»
+StatusLook ciLook(const std::vector<Run> &prRuns);
+RunCategory ciCategory(const std::vector<Run> &prRuns);
+
 // Интерфейс приложения для окон
 class App
 {
@@ -113,6 +124,10 @@ public:
                          const std::string &jumpStep) = 0;
     // Действие над запусками с подтверждением; onDone вызывается в UI-потоке
     virtual void runAction(RunAction a, std::vector<Run> runs, std::function<void(bool)> onDone = {}) = 0;
+    // Карточка PR: сведения и запуски CI
+    virtual void openPull(const PullRequest &pr) = 0;
+    // Описание и комментарии issue или PR
+    virtual void openDiscussion(const std::string &repo, int number, const std::string &title) = 0;
 };
 
 extern App *gApp;

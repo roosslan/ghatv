@@ -1,0 +1,76 @@
+name: Релиз
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Сборка бинарника
+    runs-on: ubuntu-24.04
+    # Debian 12: бинарник совместим с glibc 2.36 и новее
+    container: debian:bookworm
+    steps:
+      - name: Зависимости
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential cmake git ca-certificates \
+            libcurl4-openssl-dev nlohmann-json3-dev libncurses-dev
+
+      - uses: actions/checkout@v7
+
+      - name: Проверка версии
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          ver=$(sed -n 's/^project(ghatv VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          if [ "$tag" != "$ver" ]; then
+            echo "::error::Тег $GITHUB_REF_NAME не совпадает с версией $ver в CMakeLists.txt"
+            exit 1
+          fi
+
+      - name: Сборка и тесты
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DGHATV_TESTS=ON -DGHATV_VERSION="${GITHUB_REF_NAME#v}"
+          cmake --build build -j"$(nproc)"
+          ctest --test-dir build --output-on-failure
+
+      - name: Архив
+        run: |
+          name="ghatv-${GITHUB_REF_NAME#v}-linux-x86_64"
+          mkdir -p "dist/$name"
+          strip -o "dist/$name/ghatv" build/ghatv
+          cp README.md LICENSE "dist/$name/"
+          tar -C dist -czf "dist/$name.tar.gz" "$name"
+          cd dist && sha256sum "$name.tar.gz" > "$name.tar.gz.sha256"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: |
+            dist/*.tar.gz
+            dist/*.sha256
+
+  release:
+    name: Публикация релиза
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist
+
+      - name: Релиз GitHub
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "ghatv $GITHUB_REF_NAME" \
+            --generate-notes

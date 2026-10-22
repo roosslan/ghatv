@@ -46,6 +46,68 @@ StatusLook lookOf(const std::string &status, const std::string &conclusion)
     return {"?", status, 0x7};
 }
 
+std::vector<Run> runsOfPull(const std::vector<Run> &runs, const PullRequest &pr)
+{
+    std::vector<Run> out;
+    for (auto &r : runs)
+    {
+        if (r.repo != pr.repo || r.headSha != pr.headSha || r.headSha.empty())
+            continue;
+        bool replaced = false;
+        for (auto &o : out)
+            if (o.workflowId == r.workflowId)
+            {
+                if (r.createdAt > o.createdAt)
+                    o = r;
+                replaced = true;
+                break;
+            }
+        if (!replaced)
+            out.push_back(r);
+    }
+    return out;
+}
+
+RunCategory ciCategory(const std::vector<Run> &prRuns)
+{
+    bool failed = false, other = false;
+    for (auto &r : prRuns)
+        switch (categoryOf(r))
+        {
+        case RunCategory::Active:
+            return RunCategory::Active;
+        case RunCategory::Failed:
+            failed = true;
+            break;
+        case RunCategory::Other:
+            other = true;
+            break;
+        default:
+            break;
+        }
+    if (failed)
+        return RunCategory::Failed;
+    if (other || prRuns.empty())
+        return RunCategory::Other;
+    return RunCategory::Success;
+}
+
+StatusLook ciLook(const std::vector<Run> &prRuns)
+{
+    if (prRuns.empty())
+        return {"·", "нет CI", 0x7};
+    // Показать самый «важный» запуск: активный, затем упавший, затем прочие
+    const Run *pick = &prRuns.front();
+    RunCategory cat = ciCategory(prRuns);
+    for (auto &r : prRuns)
+        if (categoryOf(r) == cat)
+        {
+            pick = &r;
+            break;
+        }
+    return lookOf(pick->status, pick->conclusion);
+}
+
 TColorAttr withFore(uchar base, uchar fore)
 {
     return TColorAttr((base & 0xF0) | (fore & 0x0F));
@@ -89,7 +151,11 @@ void showHelp()
         "1..5   фильтр: все/активные/упавшие/успешные/прочие\n"
         "/      поиск (Ctrl+F)\n"
         "l      только последний запуск workflow+ветка\n"
-        "s      сортировка: время / репозиторий\n"
+        "F2     следующее окно: запуски, PR, issues\n"
+        "Alt+1/2/3  запуски / PR / issues\n"
+        "Щелчок по заголовку столбца — сортировка\n"
+        "Backspace  то же, что Esc (назад)\n"
+        "s      сортировка по следующему столбцу\n"
         "Ctrl+R обновить всё\n"
         "Esc    закрыть окно";
     msgBox(text, mfInformation | mfOKButton);

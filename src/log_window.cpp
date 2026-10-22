@@ -135,6 +135,48 @@ std::vector<LogLine> parseLog(const std::string &raw, int &maxWidth)
     return out;
 }
 
+std::vector<std::string> wrapText(const std::string &line, int width)
+{
+    std::vector<std::string> out;
+    if (width < 10)
+        width = 10;
+    // Отступ первой строки сохраняется у продолжений
+    size_t ind = line.find_first_not_of(' ');
+    std::string indent = ind == std::string::npos ? "" : line.substr(0, std::min<size_t>(ind, 16));
+    std::string cur = indent;
+    int curW = (int) indent.size();
+    size_t i = indent.size();
+    bool startOfLine = true;
+    while (i <= line.size())
+    {
+        size_t j = line.find(' ', i);
+        if (j == std::string::npos)
+            j = line.size();
+        std::string word = line.substr(i, j - i);
+        int ww = (int) TText::width(word);
+        if (startOfLine || curW + 1 + ww <= width)
+        {
+            if (!startOfLine)
+            {
+                cur += ' ';
+                ++curW;
+            }
+            cur += word;
+            curW += ww;
+            startOfLine = false;
+        }
+        else
+        {
+            out.push_back(cur);
+            cur = indent + word;
+            curW = (int) indent.size() + ww;
+        }
+        i = j + 1;
+    }
+    out.push_back(cur);
+    return out;
+}
+
 // ---------------------------------------------------------------- LogView
 
 LogView::LogView(const TRect &r, TScrollBar *hs, TScrollBar *vs) :
@@ -275,10 +317,12 @@ std::string LogView::infoText() const
 {
     std::string s = "строка " + std::to_string(std::min<int>(delta.y + 1, (int) lines_.size())) + "/" +
                     std::to_string(lines_.size());
-    s += " │ ошибок: " + std::to_string(errors_);
+    if (hint_.empty())
+        s += " │ ошибок: " + std::to_string(errors_);
     if (!search_.empty())
         s += " │ поиск: «" + search_ + "»";
-    s += " │ / поиск  n/N дальше/назад  e/E ошибка  g/G начало/конец  Esc закрыть";
+    s += hint_.empty() ? " │ / поиск  n/N дальше/назад  e/E ошибка  g/G начало/конец  Esc/Backspace — назад"
+                       : " │ " + hint_;
     return s;
 }
 
@@ -416,6 +460,164 @@ void LogWindow::handleEvent(TEvent &ev)
         return;
     }
     // Обновить строку состояния после прокрутки
+    if (info_)
+        info_->drawView();
+}
+
+// ---------------------------------------------------------------- DiscussionWindow
+
+namespace
+{
+
+void addText(std::vector<LogLine> &out, const std::string &text, int width, uchar color)
+{
+    size_t pos = 0;
+    while (pos <= text.size())
+    {
+        size_t nl = text.find('\n', pos);
+        if (nl == std::string::npos)
+            nl = text.size();
+        std::string line = text.substr(pos, nl - pos);
+        if (!line.empty() && line.back() == '\r')
+            line.pop_back();
+        for (auto &part : wrapText(line, width))
+        {
+            LogLine l;
+            l.text = part;
+            l.color = color;
+            out.push_back(std::move(l));
+        }
+        pos = nl + 1;
+    }
+}
+
+void addLine(std::vector<LogLine> &out, const std::string &text, uchar color, bool group = false)
+{
+    LogLine l;
+    l.text = text;
+    l.color = color;
+    l.group = group;
+    out.push_back(std::move(l));
+}
+
+std::vector<LogLine> renderDiscussion(const Discussion &d, int number, int width, int &maxW)
+{
+    std::vector<LogLine> out;
+    addLine(out, "#" + std::to_string(number) + "  " + d.title, 0x0F);
+    std::string meta = "автор " + d.author + " · создан " + util::localTime(d.createdAt) + " · " +
+                       (d.state == "open" ? "открыт" : d.state == "closed" ? "закрыт" : d.state);
+    if (!d.labels.empty())
+    {
+        meta += " · метки:";
+        for (auto &l : d.labels)
+            meta += " [" + l + "]";
+    }
+    addLine(out, meta, 0x0B);
+    addLine(out, "", 0x07);
+    if (d.body.empty())
+        addLine(out, "(без описания)", 0x08);
+    else
+        addText(out, d.body, width, 0x07);
+    for (auto &c : d.comments)
+    {
+        addLine(out, "", 0x07);
+        std::string head = "── " + c.author + " · " + util::localTime(c.createdAt) + " ";
+        int hw = (int) TText::width(head);
+        for (int i = hw; i < std::min(width, 100); ++i)
+            head += "─";
+        addLine(out, head, 0x0E, true);
+        addText(out, c.body, width, 0x07);
+    }
+    if (d.comments.empty())
+    {
+        addLine(out, "", 0x07);
+        addLine(out, "Комментариев нет", 0x08);
+    }
+    maxW = 0;
+    for (auto &l : out)
+        maxW = std::max(maxW, (int) TText::width(l.text));
+    return out;
+}
+
+} // namespace
+
+DiscussionWindow::DiscussionWindow(const TRect &r, const std::string &repo, int number, const std::string &title) :
+    TWindowInit(&TWindow::initFrame),
+    TWindow(r, (repo.substr(repo.find('/') + 1) + "#" + std::to_string(number) + " · " + title).c_str(), wnNoNumber),
+    repo_(repo),
+    number_(number),
+    alive_(std::make_shared<bool>(true))
+{
+    flags = wfMove | wfGrow | wfZoom | wfClose;
+    growMode = gfGrowHiX | gfGrowHiY;
+    palette = wpGrayWindow;
+
+    TRect e = getExtent();
+    e.grow(-1, -1);
+    TScrollBar *hs = standardScrollBar(sbHorizontal | sbHandleKeyboard);
+    TScrollBar *vs = standardScrollBar(sbVertical | sbHandleKeyboard);
+    view_ = new LogView(TRect(e.a.x, e.a.y, e.b.x, e.b.y - 1), hs, vs);
+    view_->setHint("/ поиск  n/N дальше/назад  g/G начало/конец  Esc/Backspace — назад");
+    insert(view_);
+    info_ = new LogInfo(TRect(e.a.x, e.b.y - 1, e.b.x, e.b.y), view_);
+    insert(info_);
+    view_->select();
+    load();
+}
+
+void DiscussionWindow::shutDown()
+{
+    *alive_ = false;
+    view_ = nullptr;
+    info_ = nullptr;
+    TWindow::shutDown();
+}
+
+void DiscussionWindow::load()
+{
+    auto alive = alive_;
+    std::string repo = repo_;
+    int number = number_;
+    int width = std::max(40, view_->size.x - 1);
+    view_->setMessage("Загрузка…");
+    gApp->async([this, alive, repo, number, width] {
+        Discussion d;
+        std::string err;
+        bool ok = gApp->gh().discussion(repo, number, d, err);
+        int maxW = 0;
+        auto lines = ok ? std::make_shared<std::vector<LogLine>>(renderDiscussion(d, number, width, maxW)) : nullptr;
+        gApp->post([this, alive, ok, lines, maxW, err] {
+            if (!*alive || !view_)
+                return;
+            if (!ok)
+                view_->setMessage("Не удалось загрузить: " + err);
+            else
+                view_->setLines(std::move(*lines), maxW, "");
+            redraw();
+        });
+    });
+}
+
+void DiscussionWindow::handleEvent(TEvent &ev)
+{
+    TWindow::handleEvent(ev);
+    if (ev.what == evKeyDown && ev.keyDown.keyCode == kbEsc)
+    {
+        close();
+        clearEvent(ev);
+        return;
+    }
+    if (ev.what == evCommand)
+    {
+        if (ev.message.command == cmSearch && view_)
+            view_->search();
+        else if (ev.message.command == cmRefresh)
+            load();
+        else
+            return;
+        clearEvent(ev);
+        return;
+    }
     if (info_)
         info_->drawView();
 }

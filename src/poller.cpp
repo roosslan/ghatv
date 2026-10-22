@@ -44,6 +44,12 @@ Poller::State Poller::snapshot() const
     State s;
     for (auto &kv : runs_)
         s.runs.insert(s.runs.end(), kv.second.begin(), kv.second.end());
+    for (auto &kv : pulls_)
+        s.pulls.insert(s.pulls.end(), kv.second.begin(), kv.second.end());
+    for (auto &kv : issues_)
+        s.issues.insert(s.issues.end(), kv.second.begin(), kv.second.end());
+    s.issues.insert(s.issues.end(), foreignIssues_.begin(), foreignIssues_.end());
+    s.login = login_;
     s.repoCount = (int) repos_.size();
     s.reposLoaded = reposLoaded_;
     s.busy = busy_;
@@ -65,6 +71,7 @@ void Poller::refreshAll()
         std::lock_guard<std::mutex> lock(m_);
         forceAll_ = true;
         reposAt_ = 0;  // заодно перечитать список репозиториев
+        lastSearch_ = 0;
     }
     cv_.notify_all();
 }
@@ -120,6 +127,20 @@ void Poller::loadRepos()
 {
     std::vector<RepoInfo> list;
     std::string err;
+    bool needLogin;
+    {
+        std::lock_guard<std::mutex> lock(m_);
+        needLogin = login_.empty();
+    }
+    if (needLogin)
+    {
+        std::string login, lerr;
+        if (gh_.currentUser(login, lerr))
+        {
+            std::lock_guard<std::mutex> lock(m_);
+            login_ = login;
+        }
+    }
     bool ok = gh_.listRepos(cfg_.affiliation, list, err);
     {
         std::lock_guard<std::mutex> lock(m_);
@@ -138,19 +159,21 @@ void Poller::loadRepos()
             repos_ = names;
             reposLoaded_ = true;
             // Убрать данные исчезнувших репозиториев
+            auto gone = [&](const std::string &repo) {
+                return std::find(names.begin(), names.end(), repo) == names.end();
+            };
             for (auto it = runs_.begin(); it != runs_.end();)
-            {
-                if (std::find(names.begin(), names.end(), it->first) == names.end())
-                    it = runs_.erase(it);
-                else
-                    ++it;
-            }
+                it = gone(it->first) ? runs_.erase(it) : std::next(it);
+            for (auto it = pulls_.begin(); it != pulls_.end();)
+                it = gone(it->first) ? pulls_.erase(it) : std::next(it);
+            for (auto it = issues_.begin(); it != issues_.end();)
+                it = gone(it->first) ? issues_.erase(it) : std::next(it);
         }
     }
     bump();
 }
 
-void Poller::pollRepo(const std::string &repo)
+void Poller::pollRepo(const std::string &repo, bool force)
 {
     std::vector<Run> out;
     bool changed = false;
@@ -177,8 +200,92 @@ void Poller::pollRepo(const std::string &repo)
             notify = true;
         }
     }
+
+    // Pull request'ы и issues меняются реже: опрашиваются с обычным интервалом
+    bool pullsDue = false;
+    if (cfg_.pulls || cfg_.issues)
+    {
+        std::lock_guard<std::mutex> lock(m_);
+        auto it = lastPullPoll_.find(repo);
+        pullsDue = force || it == lastPullPoll_.end() || time(nullptr) - it->second >= cfg_.interval;
+        if (pullsDue)
+            lastPullPoll_[repo] = time(nullptr);
+    }
+    if (pullsDue && cfg_.issues)
+    {
+        std::vector<Issue> list;
+        bool chg = false;
+        std::string ierr;
+        bool iok = gh_.listIssues(repo, list, chg, ierr);
+        std::lock_guard<std::mutex> lock(m_);
+        if (iok && chg)
+        {
+            auto &cur = issues_[repo];
+            if (!(cur.empty() && list.empty()))
+                notify = true;
+            cur = std::move(list);
+        }
+        else if (!iok)
+        {
+            errors_[repo] = "issues: " + ierr;
+            notify = true;
+        }
+    }
+    if (pullsDue && cfg_.pulls)
+    {
+        std::vector<PullRequest> prs;
+        bool prChanged = false;
+        std::string prErr;
+        bool prOk = gh_.listPulls(repo, prs, prChanged, prErr);
+        std::lock_guard<std::mutex> lock(m_);
+        if (prOk && prChanged)
+        {
+            auto &cur = pulls_[repo];
+            if (!(cur.empty() && prs.empty()))
+                notify = true;
+            cur = std::move(prs);
+        }
+        else if (!prOk)
+        {
+            errors_[repo] = "PR: " + prErr;
+            notify = true;
+        }
+    }
+
     if (notify)
         bump();
+}
+
+void Poller::pollForeignIssues()
+{
+    std::string login;
+    {
+        std::lock_guard<std::mutex> lock(m_);
+        login = login_;
+        lastSearch_ = time(nullptr);
+    }
+    if (login.empty())
+        return;
+    std::vector<Issue> list;
+    bool changed = false;
+    std::string err;
+    // Issues, созданные пользователем в чужих репозиториях
+    bool ok = gh_.searchIssues("is:issue is:open author:" + login + " -user:" + login, list, changed, err);
+    {
+        std::lock_guard<std::mutex> lock(m_);
+        if (ok)
+        {
+            errors_.erase("поиск issues");
+            if (!changed)
+                return;
+            for (auto &i : list)
+                i.foreign = true;
+            foreignIssues_ = std::move(list);
+        }
+        else
+            errors_["поиск issues"] = err;
+    }
+    bump();
 }
 
 void Poller::loop()
@@ -199,7 +306,16 @@ void Poller::loop()
         if (needRepos)
             loadRepos();
 
+        bool searchDue;
+        {
+            std::lock_guard<std::mutex> lock(m_);
+            searchDue = cfg_.issues && !login_.empty() && now - lastSearch_ >= cfg_.interval;
+        }
+        if (searchDue)
+            pollForeignIssues();
+
         std::vector<std::string> due;
+        std::vector<char> dueForced;
         {
             std::lock_guard<std::mutex> lock(m_);
             for (auto &repo : repos_)
@@ -215,8 +331,12 @@ void Poller::loop()
                         }
                 int iv = active ? cfg_.activeInterval : cfg_.interval;
                 auto lp = lastPoll_.find(repo);
-                if (forceAll_ || forced_.count(repo) || lp == lastPoll_.end() || now - lp->second >= iv)
+                bool forced = forceAll_ || forced_.count(repo);
+                if (forced || lp == lastPoll_.end() || now - lp->second >= iv)
+                {
                     due.push_back(repo);
+                    dueForced.push_back(forced);
+                }
             }
             forceAll_ = false;
             forced_.clear();
@@ -239,7 +359,7 @@ void Poller::loop()
                             if (stop_)
                                 return;
                         }
-                        pollRepo(due[k]);
+                        pollRepo(due[k], dueForced[k]);
                     }
                 });
             for (auto &w : workers)

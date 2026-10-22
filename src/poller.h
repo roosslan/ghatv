@@ -24,6 +24,8 @@ struct PollerConfig
     std::vector<std::string> owners;   // если не пусто: только эти владельцы
     std::vector<std::string> include;  // если не пусто: только эти репозитории (owner/name)
     std::vector<std::string> exclude;  // исключить репозитории (owner/name или name)
+    bool pulls = true;                 // опрашивать открытые pull request'ы
+    bool issues = true;                // опрашивать открытые issues
 };
 
 // Фоновый опрос запусков по всем репозиториям
@@ -33,6 +35,9 @@ public:
     struct State
     {
         std::vector<Run> runs;
+        std::vector<PullRequest> pulls;
+        std::vector<Issue> issues;
+        std::string login;
         int repoCount = 0;
         bool reposLoaded = false;
         bool busy = false;
@@ -56,9 +61,10 @@ public:
 private:
     void loop();
     void loadRepos();
-    void pollRepo(const std::string &repo);
+    void pollRepo(const std::string &repo, bool force);
     bool repoAllowed(const RepoInfo &r) const;
     void bump();
+    void pollForeignIssues();
 
     GitHub &gh_;
     PollerConfig cfg_;
@@ -69,6 +75,12 @@ private:
     std::vector<std::string> repos_;
     std::map<std::string, std::vector<Run>> runs_;
     std::map<std::string, time_t> lastPoll_;
+    std::map<std::string, std::vector<PullRequest>> pulls_;
+    std::map<std::string, time_t> lastPullPoll_;
+    std::map<std::string, std::vector<Issue>> issues_;
+    std::vector<Issue> foreignIssues_;
+    time_t lastSearch_ = 0;
+    std::string login_;
     std::set<std::string> forced_;
     std::map<std::string, std::string> errors_;
     bool forceAll_ = false;

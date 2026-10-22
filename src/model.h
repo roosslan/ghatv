@@ -13,6 +13,7 @@ struct Run
     std::string workflow;    // имя workflow
     std::string title;       // display_title (обычно сообщение коммита)
     std::string branch;
+    std::string headSha;
     std::string event;
     std::string status;      // queued, in_progress, completed, waiting, ...
     std::string conclusion;  // success, failure, cancelled, ...
@@ -23,6 +24,69 @@ struct Run
     time_t createdAt = 0;
     time_t updatedAt = 0;
     time_t startedAt = 0;
+};
+
+struct PullRequest
+{
+    int64_t id = 0;
+    int number = 0;
+    std::string repo;
+    std::string title;
+    std::string author;
+    std::string headRef;
+    std::string baseRef;
+    std::string headSha;
+    std::string url;
+    bool draft = false;
+    time_t createdAt = 0;
+    time_t updatedAt = 0;
+};
+
+struct Issue
+{
+    int64_t id = 0;
+    int number = 0;
+    std::string repo;
+    std::string title;
+    std::string author;
+    std::string url;
+    std::vector<std::string> labels;
+    int comments = 0;
+    bool foreign = false;  // в чужом репозитории (создан пользователем)
+    time_t createdAt = 0;
+    time_t updatedAt = 0;
+};
+
+// Описание и комментарии issue или PR
+struct Comment
+{
+    std::string author;
+    std::string body;
+    time_t createdAt = 0;
+};
+
+struct Discussion
+{
+    std::string title;
+    std::string author;
+    std::string state;
+    std::string body;
+    std::vector<std::string> labels;
+    time_t createdAt = 0;
+    std::vector<Comment> comments;
+};
+
+// Подробности PR, которых нет в списке
+struct PullDetails
+{
+    std::string body;
+    std::string mergeableState;
+    int comments = 0;
+    int reviewComments = 0;
+    int commits = 0;
+    int additions = 0;
+    int deletions = 0;
+    int changedFiles = 0;
 };
 
 struct Step

@@ -59,7 +59,7 @@ std::string localTime(time_t t)
     struct tm tm {};
     localtime_r(&t, &tm);
     char buf[32];
-    strftime(buf, sizeof(buf), "%d.%m %H:%M", &tm);
+    strftime(buf, sizeof(buf), "%d.%m.%y %H:%M", &tm);
     return buf;
 }
 

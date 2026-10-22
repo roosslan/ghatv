@@ -7,7 +7,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /src
 COPY CMakeLists.txt ./
 COPY src ./src
-RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+# Версия для «О программе»; по умолчанию — версия из CMakeLists.txt
+ARG GHATV_VERSION=
+RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release ${GHATV_VERSION:+-DGHATV_VERSION=$GHATV_VERSION} \
     && cmake --build build -j"$(nproc)" --target ghatv \
     && strip build/ghatv
 

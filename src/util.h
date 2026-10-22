@@ -13,7 +13,7 @@ time_t parseIso(const std::string &s);
 std::string ago(time_t t, time_t now);
 // "0:42", "12:05", "1:02:03"
 std::string duration(long secs);
-// "13.10 10:32"
+// "13.10.26 10:32"
 std::string localTime(time_t t);
 std::string lower(std::string s);
 bool containsNoCase(const std::string &haystack, const std::string &needleLower);
