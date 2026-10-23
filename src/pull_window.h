@@ -30,6 +30,9 @@ public:
     int64_t rowId(int idx) const override { return runs_[idx].id; }
     std::string emptyText() const override;
     std::string infoText() const override;
+    std::string rowUrl(int idx) const override { return runs_[idx].url; }
+    // Клавиша o в карточке открывает сам PR
+    std::string currentUrl() const override { return pr_.url; }
 
     void openRow(int idx) override;
     bool rowKey(TEvent &ev) override;

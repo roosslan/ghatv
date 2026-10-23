@@ -9,6 +9,7 @@ services:
     environment:
       GH_TOKEN: ${GH_TOKEN:?GH_TOKEN не задан}
       TZ: ${TZ:-Europe/Moscow}
+      GHATV_LANG: ${GHATV_LANG:-en}
       GHATV_AFFILIATION: ${GHATV_AFFILIATION:-owner}
       GHATV_RUNS_PER_REPO: ${GHATV_RUNS_PER_REPO:-20}
       GHATV_INTERVAL: ${GHATV_INTERVAL:-60}

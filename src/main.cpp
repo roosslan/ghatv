@@ -25,15 +25,15 @@ const char *actionName(RunAction a)
     switch (a)
     {
     case RunAction::Rerun:
-        return "Перезапустить";
+        return L("Rerun", "Перезапустить");
     case RunAction::RerunFailed:
-        return "Перезапустить упавшие job в";
+        return L("Rerun failed jobs in", "Перезапустить упавшие job в");
     case RunAction::Cancel:
-        return "Отменить";
+        return L("Cancel", "Отменить");
     case RunAction::Delete:
-        return "Удалить";
+        return L("Delete", "Удалить");
     case RunAction::DeleteLogs:
-        return "Удалить логи";
+        return L("Delete logs of", "Удалить логи");
     }
     return "";
 }
@@ -58,6 +58,8 @@ bool eligible(RunAction a, const Run &r)
 // 1 запуск, 2 запуска, 5 запусков
 std::string runsWord(size_t n)
 {
+    if (gLang == Lang::En)
+        return std::to_string(n) + (n == 1 ? " run" : " runs");
     size_t n100 = n % 100, n10 = n % 10;
     const char *w = (n100 >= 11 && n100 <= 14) ? "запусков" : n10 == 1 ? "запуск" : (n10 >= 2 && n10 <= 4) ? "запуска" : "запусков";
     return std::to_string(n) + " " + w;
@@ -86,6 +88,8 @@ public:
     void openLog(const std::string &repo, int64_t jobId, const std::string &title, const std::string &jump) override;
     void runAction(RunAction a, std::vector<Run> runs, std::function<void(bool)> onDone) override;
     void openPull(const PullRequest &pr) override;
+    void openUrl(const std::string &url) override;
+    void setLanguage(Lang lang);
     void openDiscussion(const std::string &repo, int number, const std::string &title) override;
 
 private:
@@ -121,41 +125,43 @@ TMenuBar *GhApp::initMenuBar(TRect r)
 {
     r.b.y = r.a.y + 1;
     return new TMenuBar(r,
-        *new TSubMenu("~Ф~айл", kbAltF) +
-            *new TMenuItem("~О~бновить всё", cmRefresh, kbCtrlR, hcNoContext, "Ctrl-R") +
+        *new TSubMenu(L("~F~ile", "~Ф~айл"), kbAltF) +
+            *new TMenuItem(L("~R~efresh all", "~О~бновить всё"), cmRefresh, kbCtrlR, hcNoContext, "Ctrl-R") +
+            *new TMenuItem(L("~L~anguage: Русский", "~Я~зык: English"), cmToggleLang, kbCtrlL, hcNoContext, "Ctrl-L") +
             newLine() +
-            *new TMenuItem("~В~ыход", cmQuit, kbAltX, hcNoContext, "Alt-X") +
-        *new TSubMenu("~В~ид", kbAltV) +
-            *new TMenuItem("~В~се", cmFilterAll, kbNoKey, hcNoContext, "1") +
-            *new TMenuItem("~А~ктивные", cmFilterActive, kbNoKey, hcNoContext, "2") +
-            *new TMenuItem("~У~павшие", cmFilterFailed, kbNoKey, hcNoContext, "3") +
-            *new TMenuItem("У~с~пешные", cmFilterSuccess, kbNoKey, hcNoContext, "4") +
-            *new TMenuItem("~П~рочие", cmFilterOther, kbNoKey, hcNoContext, "5") +
+            *new TMenuItem(L("E~x~it", "~В~ыход"), cmQuit, kbAltX, hcNoContext, "Alt-X") +
+        *new TSubMenu(L("~V~iew", "~В~ид"), kbAltV) +
+            *new TMenuItem(L("~A~ll", "~В~се"), cmFilterAll, kbNoKey, hcNoContext, "1") +
+            *new TMenuItem(L("A~c~tive", "~А~ктивные"), cmFilterActive, kbNoKey, hcNoContext, "2") +
+            *new TMenuItem(L("~F~ailed", "~У~павшие"), cmFilterFailed, kbNoKey, hcNoContext, "3") +
+            *new TMenuItem(L("S~u~ccessful", "У~с~пешные"), cmFilterSuccess, kbNoKey, hcNoContext, "4") +
+            *new TMenuItem(L("~O~ther", "~П~рочие"), cmFilterOther, kbNoKey, hcNoContext, "5") +
             newLine() +
-            *new TMenuItem("~П~оиск…", cmSearch, kbCtrlF, hcNoContext, "/") +
-            *new TMenuItem("~Т~олько последние", cmLatestOnly, kbNoKey, hcNoContext, "L") +
-            *new TMenuItem("С~о~ртировка", cmSortToggle, kbNoKey, hcNoContext, "S") +
+            *new TMenuItem(L("Searc~h~…", "П~о~иск…"), cmSearch, kbCtrlF, hcNoContext, "/") +
+            *new TMenuItem(L("~L~atest only", "~Т~олько последние"), cmLatestOnly, kbNoKey, hcNoContext, "L") +
+            *new TMenuItem(L("Sor~t~", "Со~р~тировка"), cmSortToggle, kbNoKey, hcNoContext, "S") +
             newLine() +
-            *new TMenuItem("~З~апуски", cmShowRuns, kbNoKey, hcNoContext, "Alt-1") +
-            *new TMenuItem("Pull ~r~equest'ы", cmShowPulls, kbNoKey, hcNoContext, "Alt-2") +
+            *new TMenuItem(L("~R~uns", "~З~апуски"), cmShowRuns, kbNoKey, hcNoContext, "Alt-1") +
+            *new TMenuItem(L("~P~ull requests", "Pull ~r~equest'ы"), cmShowPulls, kbNoKey, hcNoContext, "Alt-2") +
             *new TMenuItem("~I~ssues", cmShowIssues, kbNoKey, hcNoContext, "Alt-3") +
-            *new TMenuItem("Следующее о~к~но", cmNextMain, kbF2, hcNoContext, "F2") +
-            *new TMenuItem("Скрыть ~ч~ерновики PR", cmHideDrafts, kbNoKey, hcNoContext, "D") +
-        *new TSubMenu("~З~апуск", kbAltR) +
-            *new TMenuItem("~О~ткрыть", cmOpenRun, kbNoKey, hcNoContext, "Enter") +
-            *new TMenuItem("~Л~ог", cmShowLog, kbF3, hcNoContext, "F3") +
+            *new TMenuItem(L("~N~ext window", "Следующее о~к~но"), cmNextMain, kbF2, hcNoContext, "F2") +
+            *new TMenuItem(L("Hide PR ~d~rafts", "Скрыть ~ч~ерновики PR"), cmHideDrafts, kbNoKey, hcNoContext, "D") +
+        *new TSubMenu(L("~R~un", "~З~апуск"), kbAltR) +
+            *new TMenuItem(L("~O~pen", "~О~ткрыть"), cmOpenRun, kbNoKey, hcNoContext, "Enter") +
+            *new TMenuItem(L("Open in ~b~rowser", "Открыть в ~б~раузере"), cmOpenBrowser, kbNoKey, hcNoContext, "Ctrl-Enter") +
+            *new TMenuItem(L("~L~og", "~Л~ог"), cmShowLog, kbF3, hcNoContext, "F3") +
             newLine() +
-            *new TMenuItem("~П~ерезапустить", cmRerun, kbF5, hcNoContext, "F5") +
-            *new TMenuItem("Перезапустить ~у~павшие", cmRerunFailed, kbF6, hcNoContext, "F6") +
-            *new TMenuItem("~О~тменить", cmCancelRun, kbF7, hcNoContext, "F7") +
-            *new TMenuItem("~У~далить", cmDeleteRun, kbF8, hcNoContext, "F8") +
-            *new TMenuItem("Удалить ~л~оги", cmDeleteLogs, kbShiftF8, hcNoContext, "Shift-F8") +
+            *new TMenuItem(L("~R~erun", "~П~ерезапустить"), cmRerun, kbF5, hcNoContext, "F5") +
+            *new TMenuItem(L("Rerun ~f~ailed", "Перезапустить ~у~павшие"), cmRerunFailed, kbF6, hcNoContext, "F6") +
+            *new TMenuItem(L("~C~ancel", "О~т~менить"), cmCancelRun, kbF7, hcNoContext, "F7") +
+            *new TMenuItem(L("~D~elete", "~У~далить"), cmDeleteRun, kbF8, hcNoContext, "F8") +
+            *new TMenuItem(L("Delete lo~g~s", "Удалить ~л~оги"), cmDeleteLogs, kbShiftF8, hcNoContext, "Shift-F8") +
             newLine() +
-            *new TMenuItem("Отметить ~в~се", cmMarkAll, kbNoKey, hcNoContext, "+") +
-            *new TMenuItem("~С~нять отметки", cmUnmarkAll, kbNoKey, hcNoContext, "-") +
+            *new TMenuItem(L("~M~ark all", "Отметить ~в~се"), cmMarkAll, kbNoKey, hcNoContext, "+") +
+            *new TMenuItem(L("~U~nmark all", "~С~нять отметки"), cmUnmarkAll, kbNoKey, hcNoContext, "-") +
         *new TSubMenu("~?~", kbAltH) +
-            *new TMenuItem("~К~лавиши", cmKeysHelp, kbF1, hcNoContext, "F1") +
-            *new TMenuItem("~О~ программе", cmAbout, kbNoKey));
+            *new TMenuItem(L("~K~eys", "~К~лавиши"), cmKeysHelp, kbF1, hcNoContext, "F1") +
+            *new TMenuItem(L("~A~bout", "~О~ программе"), cmAbout, kbNoKey));
 }
 
 TStatusLine *GhApp::initStatusLine(TRect r)
@@ -163,15 +169,16 @@ TStatusLine *GhApp::initStatusLine(TRect r)
     r.a.y = r.b.y - 1;
     return new TStatusLine(r,
         *new TStatusDef(0, 0xFFFF) +
-            *new TStatusItem("~F1~ Справка", kbF1, cmKeysHelp) +
-            *new TStatusItem("~F2~ Окна", kbF2, cmNextMain) +
-            *new TStatusItem("~F3~ Лог", kbF3, cmShowLog) +
-            *new TStatusItem("~F5~ Перезапуск", kbF5, cmRerun) +
-            *new TStatusItem("~F6~ Упавшие", kbF6, cmRerunFailed) +
-            *new TStatusItem("~F7~ Отмена", kbF7, cmCancelRun) +
-            *new TStatusItem("~F8~ Удалить", kbF8, cmDeleteRun) +
-            *new TStatusItem("~F10~ Меню", kbF10, cmMenu) +
-            *new TStatusItem("~Alt-X~ Выход", kbAltX, cmQuit) +
+            *new TStatusItem(L("~F1~ Help", "~F1~ Справка"), kbF1, cmKeysHelp) +
+            *new TStatusItem(L("~F2~ Windows", "~F2~ Окна"), kbF2, cmNextMain) +
+            *new TStatusItem(L("~F3~ Log", "~F3~ Лог"), kbF3, cmShowLog) +
+            *new TStatusItem(L("~F5~ Rerun", "~F5~ Перезапуск"), kbF5, cmRerun) +
+            *new TStatusItem(L("~F6~ Failed", "~F6~ Упавшие"), kbF6, cmRerunFailed) +
+            *new TStatusItem(L("~F7~ Cancel", "~F7~ Отмена"), kbF7, cmCancelRun) +
+            *new TStatusItem(L("~F8~ Delete", "~F8~ Удалить"), kbF8, cmDeleteRun) +
+            *new TStatusItem(L("~F10~ Menu", "~F10~ Меню"), kbF10, cmMenu) +
+            *new TStatusItem(L("~Ctrl-L~ RU", "~Ctrl-L~ EN"), kbCtrlL, cmToggleLang) +
+            *new TStatusItem(L("~Alt-X~ Exit", "~Alt-X~ Выход"), kbAltX, cmQuit) +
             *new TStatusItem(0, kbShiftF8, cmDeleteLogs) +
             *new TStatusItem(0, kbF9, cmMenu) +
             *new TStatusItem(0, kbCtrlR, cmRefresh) +
@@ -254,9 +261,14 @@ void GhApp::handleEvent(TEvent &ev)
     case cmRefresh:
         poller_.refreshAll();
         break;
+    case cmToggleLang:
+        setLanguage(gLang == Lang::En ? Lang::Ru : Lang::En);
+        break;
     case cmAbout:
-        msgBox("ghatv " GHATV_VERSION " — панель GitHub Actions\nна Turbo Vision (magiblot/tvision)\n\n"
-               "https://github.com/roosslan/ghatv",
+        msgBox(std::string("ghatv " GHATV_VERSION) +
+                   L(" — GitHub Actions dashboard\non Turbo Vision (magiblot/tvision)\n\n",
+                     " — панель GitHub Actions\nна Turbo Vision (magiblot/tvision)\n\n") +
+                   "https://github.com/roosslan/ghatv",
                mfInformation | mfOKButton);
         break;
     default:
@@ -280,11 +292,64 @@ void GhApp::getEvent(TEvent &ev)
         }
         return false;
     };
+    // Ctrl+Enter — открыть в браузере (в ttyd код клавиши передаёт скрипт страницы, см. Dockerfile)
+    if (ev.what == evKeyDown && ev.keyDown.keyCode == kbCtrlEnter && !inDialog())
+    {
+        ev.what = evCommand;
+        ev.message.command = cmOpenBrowser;
+        ev.message.infoPtr = nullptr;
+        return;
+    }
     if (ev.what == evKeyDown && ev.keyDown.keyCode == kbBack && !inDialog())
     {
         ev.keyDown.keyCode = kbEsc;
         ev.keyDown.textLength = 0;
     }
+}
+
+void GhApp::setLanguage(Lang lang)
+{
+    gLang = lang;
+    // Меню и строка состояния создаются заново с подписями на новом языке
+    TRect r = getExtent();
+    if (menuBar)
+    {
+        remove(menuBar);
+        TObject::destroy(menuBar);
+    }
+    menuBar = initMenuBar(r);
+    insert(menuBar);
+    if (statusLine)
+    {
+        remove(statusLine);
+        TObject::destroy(statusLine);
+    }
+    statusLine = initStatusLine(r);
+    insert(statusLine);
+    message(deskTop, evBroadcast, cmLangChanged, nullptr);
+    redraw();
+}
+
+void GhApp::openUrl(const std::string &url)
+{
+    if (url.empty())
+        return;
+    // Браузер открывает вкладку только по действию пользователя, а при перехвате мыши
+    // программой ссылки в ttyd не срабатывают. Поэтому интерфейс временно отдаёт терминал:
+    // ссылка выводится обычным текстом, и ttyd делает её кликабельной.
+    suspend();
+    std::string text = std::string("\x1b[2J\x1b[H\n  ") +
+                       L("Click the link to open it in a new browser tab:",
+                         "Щелчок по ссылке откроет её в новой вкладке браузера:") +
+                       "\n\n    " + url + "\n\n  " +
+                       L("Press Enter to return.", "Enter — вернуться.") + "\n";
+    fputs(text.c_str(), stdout);
+    fflush(stdout);
+    int c;
+    while ((c = getchar()) != EOF && c != '\n' && c != '\r')
+        ;
+    resume();
+    redraw();
 }
 
 void GhApp::openPull(const PullRequest &pr)
@@ -316,12 +381,12 @@ void GhApp::openFirstLog(const Run &run)
         post([this, run, ok, jobs, err] {
             if (!ok)
             {
-                msgBox("Не удалось получить список job: " + err, mfError | mfOKButton);
+                msgBox(L("Failed to get jobs: ", "Не удалось получить список job: ") + err, mfError | mfOKButton);
                 return;
             }
             if (jobs.empty())
             {
-                msgBox("В запуске нет job", mfInformation | mfOKButton);
+                msgBox(L("The run has no jobs", "В запуске нет job"), mfInformation | mfOKButton);
                 return;
             }
             const Job *job = &jobs.front();
@@ -345,7 +410,7 @@ void GhApp::runAction(RunAction a, std::vector<Run> runs, std::function<void(boo
             ok.push_back(r);
     if (ok.empty())
     {
-        msgBox("Действие не применимо к выбранным запускам", mfInformation | mfOKButton);
+        msgBox(L("The action does not apply to the selected runs", "Действие не применимо к выбранным запускам"), mfInformation | mfOKButton);
         return;
     }
     size_t skipped = runs.size() - ok.size();
@@ -355,11 +420,11 @@ void GhApp::runAction(RunAction a, std::vector<Run> runs, std::function<void(boo
     {
         std::string text = std::string(actionName(a)) + " ";
         if (ok.size() == 1)
-            text += "запуск\n" + ok[0].workflow + " #" + std::to_string(ok[0].runNumber) + "\n(" + ok[0].repo + ")?";
+            text += L("run\n", "запуск\n") + ok[0].workflow + " #" + std::to_string(ok[0].runNumber) + "\n(" + ok[0].repo + ")?";
         else
             text += runsWord(ok.size()) + "?";
         if (skipped)
-            text += "\nНеподходящих пропущено: " + std::to_string(skipped);
+            text += L("\nSkipped as not applicable: ", "\nНеподходящих пропущено: ") + std::to_string(skipped);
         if (msgBox(text, mfConfirmation | mfYesButton | mfNoButton) != cmYes)
             return;
     }
@@ -401,7 +466,7 @@ void GhApp::runAction(RunAction a, std::vector<Run> runs, std::function<void(boo
                 poller_.refreshRepo(r.repo);
             if (!errors.empty())
             {
-                std::string text = "Ошибок: " + std::to_string(errors.size());
+                std::string text = L("Errors: ", "Ошибок: ") + std::to_string(errors.size());
                 for (size_t i = 0; i < errors.size() && i < 4; ++i)
                     text += "\n" + errors[i];
                 msgBox(text, mfError | mfOKButton);
@@ -412,15 +477,39 @@ void GhApp::runAction(RunAction a, std::vector<Run> runs, std::function<void(boo
     });
 }
 
-int main()
+namespace
 {
+
+void applyLang(std::string v)
+{
+    v = util::lower(v);
+    if (v == "ru" || v.rfind("ru_", 0) == 0 || v.rfind("ru-", 0) == 0)
+        gLang = Lang::Ru;
+    else if (v == "en" || v.rfind("en_", 0) == 0 || v.rfind("en-", 0) == 0)
+        gLang = Lang::En;
+}
+
+} // namespace
+
+int main(int argc, char **argv)
+{
+    applyLang(util::env("GHATV_LANG", "en"));
+    for (int i = 1; i < argc; ++i)
+    {
+        std::string a = argv[i];
+        if (a.rfind("--lang=", 0) == 0)
+            applyLang(a.substr(7));
+        else if (a == "--lang" && i + 1 < argc)
+            applyLang(argv[++i]);
+    }
 
     curl_global_init(CURL_GLOBAL_DEFAULT);
 
     std::string token = util::env("GH_TOKEN", util::env("GITHUB_TOKEN"));
     std::string startupError;
     if (token.empty())
-        startupError = "Не задан токен.\nНеобходимо передать переменную окружения GH_TOKEN.";
+        startupError = L("No token.\nThe GH_TOKEN environment variable must be set.",
+                         "Не задан токен.\nНеобходимо передать переменную окружения GH_TOKEN.");
 
     PollerConfig cfg;
     cfg.affiliation = util::env("GHATV_AFFILIATION", "owner");

@@ -17,8 +17,9 @@ public:
     int compare(int a, int b, int col) const override;
     int64_t rowId(int idx) const override { return st_.pulls[idx].id; }
     bool dimmed(int idx) const override { return st_.pulls[idx].draft; }
-    std::string emptyText() const override { return "Открытых pull request'ов нет"; }
+    std::string emptyText() const override { return L("No open pull requests", "Открытых pull request'ов нет"); }
     std::string infoText() const override;
+    std::string rowUrl(int idx) const override { return st_.pulls[idx].url; }
 
     void openRow(int idx) override;
     bool rowKey(TEvent &ev) override;

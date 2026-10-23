@@ -11,13 +11,13 @@ enum Col { ColUpdated, ColCi, ColRepo, ColNumber, ColTitle, ColBranch, ColAuthor
 std::vector<ColumnDef> pullColumns()
 {
     std::vector<ColumnDef> c(7);
-    c[ColUpdated] = {"Обновлён", 14, 0, 0, false, 0, true};
+    c[ColUpdated] = {"Updated|Обновлён", 14, 0, 0, false, 0, true};
     c[ColCi] = {"CI", 14};
-    c[ColRepo] = {"Репозиторий", 0, 24, 30};
+    c[ColRepo] = {"Repository|Репозиторий", 0, 24, 30};
     c[ColNumber] = {"#", 6, 0, 0, true, 0, true};
-    c[ColTitle] = {"Заголовок"};
-    c[ColBranch] = {"Ветка → база", 0, 26, 36};
-    c[ColAuthor] = {"Автор", 14, 0, 0, false, 110};
+    c[ColTitle] = {"Title|Заголовок"};
+    c[ColBranch] = {"Branch → base|Ветка → база", 0, 26, 36};
+    c[ColAuthor] = {"Author|Автор", 14, 0, 0, false, 110};
     return c;
 }
 
@@ -42,7 +42,7 @@ int ciRank(RunCategory c, bool none)
 
 PullsWindow::PullsWindow(const TRect &r) :
     TWindowInit(&TWindow::initFrame),
-    TableWindow(r, "Pull request'ы", 2, pullColumns())
+    TableWindow(r, "Pull requests|Pull request'ы", 2, pullColumns())
 {
 }
 
@@ -81,7 +81,7 @@ Cell PullsWindow::cell(int idx, int col) const
     case ColNumber:
         return {std::to_string(p.number)};
     case ColTitle:
-        return {(p.draft ? "(черновик) " : "") + p.title};
+        return {(p.draft ? L("(draft) ", "(черновик) ") : "") + p.title};
     case ColBranch:
         return {p.headRef + " → " + p.baseRef};
     case ColAuthor:
@@ -115,18 +115,18 @@ int PullsWindow::compare(int a, int b, int col) const
 
 std::string PullsWindow::infoText() const
 {
-    static const char *names[] = {"все", "CI идёт", "CI упал", "CI успешно", "без CI / прочие"};
+    const char *names[] = {L("all", "все"), L("CI running", "CI идёт"), L("CI failed", "CI упал"), L("CI passed", "CI успешно"), L("no CI / other", "без CI / прочие")};
     std::string s;
     if (!st_.reposLoaded && st_.error.empty())
-        s = "Загрузка списка репозиториев…";
+        s = L("Loading repository list…", "Загрузка списка репозиториев…");
     else
-        s = "Открытых PR: " + std::to_string(st_.pulls.size()) + "  показано: " + std::to_string(rowCount());
-    s += " │ фильтр: ";
+        s = L("Open PRs: ", "Открытых PR: ") + std::to_string(st_.pulls.size()) + L("  shown: ", "  показано: ") + std::to_string(rowCount());
+    s += L(" │ filter: ", " │ фильтр: ");
     s += names[(int) filter_];
     if (hideDrafts_)
-        s += ", без черновиков";
+        s += L(", no drafts", ", без черновиков");
     s += " │ " + viewState();
-    s += " │ Enter — открыть PR, d — черновики";
+    s += L(" │ Enter — open PR, o — browser, d — drafts", " │ Enter — открыть PR, d — черновики");
     if (!st_.error.empty())
         s += " │ ⚠ " + st_.error;
     return s;
@@ -144,7 +144,7 @@ void PullsWindow::action(RunAction a)
         return;
     if (ci_[idx].empty())
     {
-        msgBox("У этого PR нет запусков workflow", mfInformation | mfOKButton);
+        msgBox(L("This PR has no workflow runs", "У этого PR нет запусков workflow"), mfInformation | mfOKButton);
         return;
     }
     gApp->runAction(a, ci_[idx]);

@@ -40,7 +40,7 @@ void TableHeader::draw()
         if (!first)
             b.moveStr(x++, "│", sep);
         first = false;
-        std::string t = cols[i].title;
+        std::string t = trPair(cols[i].title);
         if ((int) i == w_->sortCol())
             t = cols[i].right ? std::string(w_->sortDesc() ? "▼" : "▲") + t
                               : t + (w_->sortDesc() ? "▼" : "▲");
@@ -193,6 +193,8 @@ void TableList::handleEvent(TEvent &ev)
             w_->search();
         else if (keyIs(ev, "s", "ы"))
             w_->nextSort();
+        else if (keyIs(ev, "o", "щ"))
+            w_->openInBrowser();
         else
             handled = false;
         if (handled)
@@ -209,8 +211,9 @@ void TableList::handleEvent(TEvent &ev)
 TableWindow::TableWindow(const TRect &r, const std::string &title, short number, std::vector<ColumnDef> cols,
                          int lead, int topLines) :
     TWindowInit(&TWindow::initFrame),
-    TWindow(r, title.c_str(), number),
+    TWindow(r, trPair(title).c_str(), number),
     cols_(std::move(cols)),
+    titleKey_(title),
     lead_(lead)
 {
     flags = wfMove | wfGrow | wfZoom;
@@ -366,18 +369,31 @@ void TableWindow::search()
     char buf[128];
     strncpy(buf, search_.c_str(), sizeof(buf) - 1);
     buf[sizeof(buf) - 1] = '\0';
-    if (inputBox("Поиск", "Текст (пусто — сбросить):", buf, sizeof(buf) - 1) != cmCancel)
+    if (inputBox(L("Search", "Поиск"), L("Text (empty — reset):", "Текст (пусто — сбросить):"), buf, sizeof(buf) - 1) != cmCancel)
     {
         search_ = buf;
         refresh();
     }
 }
 
+std::string TableWindow::currentUrl() const
+{
+    int idx = focusedData();
+    return idx >= 0 ? rowUrl(idx) : "";
+}
+
+void TableWindow::openInBrowser()
+{
+    std::string url = currentUrl();
+    if (!url.empty())
+        gApp->openUrl(url);
+}
+
 std::string TableWindow::viewState() const
 {
-    std::string s = "сортировка: " + cols_[sortCol_].title + (sortDesc_ ? " ▼" : " ▲");
+    std::string s = L("sort: ", "сортировка: ") + trPair(cols_[sortCol_].title) + (sortDesc_ ? " ▼" : " ▲");
     if (!search_.empty())
-        s += " │ поиск: «" + search_ + "»";
+        s += L(" │ search: «", " │ поиск: «") + search_ + "»";
     return s;
 }
 
@@ -390,6 +406,13 @@ void TableWindow::handleEvent(TEvent &ev)
         info_->drawView();
         return;
     }
+    if (ev.what == evBroadcast && ev.message.command == cmLangChanged)
+    {
+        delete[] (char *) title;
+        title = newStr(trPair(titleKey_));
+        redraw();
+        return;
+    }
     if (ev.what != evCommand)
         return;
     switch (ev.message.command)
@@ -399,6 +422,9 @@ void TableWindow::handleEvent(TEvent &ev)
         break;
     case cmSortToggle:
         nextSort();
+        break;
+    case cmOpenBrowser:
+        openInBrowser();
         break;
     default:
         if (!command(ev.message.command))

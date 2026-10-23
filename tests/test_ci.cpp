@@ -62,14 +62,30 @@ TEST("ciCategory: приоритет активных и упавших")
     v.push_back(run(3, 3, "a", "in_progress", "", 0));
     CHECK(ciCategory(v) == RunCategory::Active);
     CHECK(ciCategory({}) == RunCategory::Other);
+    gLang = Lang::En;
+    CHECK_EQ(ciLook({}).label, std::string("no CI"));
+    CHECK_EQ(ciLook(v).label, std::string("in progress"));
+    gLang = Lang::Ru;
     CHECK_EQ(ciLook({}).label, std::string("нет CI"));
     CHECK_EQ(ciLook(v).label, std::string("выполняется"));
+    gLang = Lang::En;
 }
 
-TEST("lookOf: подписи статусов")
+TEST("lookOf: подписи статусов, английский")
 {
+    gLang = Lang::En;
+    CHECK_EQ(lookOf("completed", "success").label, std::string("success"));
+    CHECK_EQ(lookOf("completed", "failure").label, std::string("failure"));
+    CHECK_EQ(lookOf("queued", "").label, std::string("queued"));
+    CHECK_EQ(lookOf("completed", "cancelled").label, std::string("cancelled"));
+}
+
+TEST("lookOf: подписи статусов, русский")
+{
+    gLang = Lang::Ru;
     CHECK_EQ(lookOf("completed", "success").label, std::string("успех"));
     CHECK_EQ(lookOf("completed", "failure").label, std::string("ошибка"));
     CHECK_EQ(lookOf("queued", "").label, std::string("в очереди"));
     CHECK_EQ(lookOf("completed", "cancelled").label, std::string("отменён"));
+    gLang = Lang::En;
 }
