@@ -5,7 +5,7 @@
 // Описание столбца таблицы
 struct ColumnDef
 {
-    std::string title;
+    std::string title;       // "English|Русский"
     int width = 0;           // фиксированная ширина
     int share = 0;           // доля свободного места в процентах (при width == 0)
     int maxWidth = 0;        // предел для доли; 0 у столбца без width — забирает остаток
@@ -79,6 +79,10 @@ public:
     virtual bool marked(int idx) const { (void) idx; return false; }
     virtual std::string emptyText() const = 0;
     virtual std::string infoText() const = 0;
+    // Адрес строки на github.com для открытия в браузере
+    virtual std::string rowUrl(int idx) const { (void) idx; return ""; }
+    // Адрес для клавиши o; по умолчанию — адрес текущей строки
+    virtual std::string currentUrl() const;
 
     // Поведение
     virtual void openRow(int idx) = 0;
@@ -103,6 +107,7 @@ public:
     // Пересчитать фильтр и сортировку, сохранив позицию курсора, и перерисовать
     void refresh();
     void search();
+    void openInBrowser();
 
 protected:
     // Строка с текущей сортировкой и поиском для infoText()
@@ -117,6 +122,7 @@ private:
     void rebuild();
 
     std::vector<ColumnDef> cols_;
+    std::string titleKey_;  // "English|Русский"
     std::vector<int> rows_;
     int lead_;
     int sortCol_ = 0;

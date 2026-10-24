@@ -27,6 +27,7 @@
 #define Uses_TButton
 #include <tvision/tv.h>
 
+#include "i18n.h"
 #include "model.h"
 
 #include <functional>
@@ -65,6 +66,9 @@ enum : ushort
     cmShowPulls,
     cmShowIssues,
     cmHideDrafts,
+    cmOpenBrowser,
+    cmToggleLang,
+    cmLangChanged,  // широковещательно после смены языка
 };
 
 // Цвета (BIOS: старшая тетрада — фон, младшая — текст)
@@ -124,6 +128,8 @@ public:
                          const std::string &jumpStep) = 0;
     // Действие над запусками с подтверждением; onDone вызывается в UI-потоке
     virtual void runAction(RunAction a, std::vector<Run> runs, std::function<void(bool)> onDone = {}) = 0;
+    // Показать ссылку для открытия в браузере (временный выход из интерфейса)
+    virtual void openUrl(const std::string &url) = 0;
     // Карточка PR: сведения и запуски CI
     virtual void openPull(const PullRequest &pr) = 0;
     // Описание и комментарии issue или PR

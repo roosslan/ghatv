@@ -29,15 +29,36 @@ RUN case "${TARGETARCH:-amd64}" in \
     && curl -fsSL -o /usr/local/bin/ttyd \
         "https://github.com/tsl0922/ttyd/releases/download/${TTYD_VERSION}/ttyd.${arch}" \
     && echo "${sum}  /usr/local/bin/ttyd" | sha256sum -c - \
-    && chmod +x /usr/local/bin/ttyd \
-    && apt-get purge -y curl && apt-get autoremove -y
+    && chmod +x /usr/local/bin/ttyd
+# Своя страница ttyd: встроенная страница ttyd с заменой значка и заголовка вкладки
+# и скриптом для Ctrl+Enter. Страница берётся у установленного ttyd, поэтому совпадает с его версией.
+# xterm.js отправляет на Ctrl+Enter то же, что на Enter; скрипт вместо этого отправляет код
+# Ctrl+Enter в формате протокола kitty (ESC [13;5u), который tvision распознаёт. Скрипт записан без символов
+# «\», «&» и «|», чтобы его можно было подставить через sed.
+COPY assets/favicon.png assets/ctrl-enter.html /usr/share/ghatv/
+RUN set -e; \
+    ttyd --port 7682 true >/dev/null 2>&1 & pid=$!; \
+    for i in $(seq 1 50); do curl -fsS -o /tmp/index.html http://127.0.0.1:7682/ && break; sleep 0.1; done; \
+    kill "$pid"; \
+    icon=$(base64 -w0 /usr/share/ghatv/favicon.png); \
+    sed -e "s|href=\"data:image/png;base64,[A-Za-z0-9+/=]*\"|href=\"data:image/png;base64,${icon}\"|" \
+        -e 's|<title>ttyd - Terminal</title>|<title>ghatv</title>|' \
+        -e "s|</body>|$(cat /usr/share/ghatv/ctrl-enter.html)</body>|" \
+        /tmp/index.html > /usr/share/ghatv/index.html; \
+    grep -q "$icon" /usr/share/ghatv/index.html; \
+    grep -q '<title>ghatv</title>' /usr/share/ghatv/index.html; \
+    grep -q '13;5u' /usr/share/ghatv/index.html; \
+    rm /tmp/index.html /usr/share/ghatv/ctrl-enter.html; \
+    apt-get purge -y curl && apt-get autoremove -y
 COPY --from=build /src/build/ghatv /usr/local/bin/ghatv
 ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
     TERM=xterm-256color \
     COLORTERM=truecolor
 EXPOSE 7681
-ENTRYPOINT ["tini", "--", "ttyd", "--writable", "--port", "7681", \
+# --url-arg: язык можно выбрать адресом http://localhost:7681/?arg=--lang=ru
+ENTRYPOINT ["tini", "--", "ttyd", "--writable", "--url-arg", "--port", "7681", \
+            "--index", "/usr/share/ghatv/index.html", \
             "-t", "titleFixed=ghatv", \
             "-t", "fontSize=15", \
             "-t", "disableLeaveAlert=true", \

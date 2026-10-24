@@ -17,8 +17,9 @@ public:
     Cell cell(int idx, int col) const override;
     int compare(int a, int b, int col) const override;
     int64_t rowId(int idx) const override { return st_.issues[idx].id; }
-    std::string emptyText() const override { return "Открытых issues нет"; }
+    std::string emptyText() const override { return L("No open issues", "Открытых issues нет"); }
     std::string infoText() const override;
+    std::string rowUrl(int idx) const override { return st_.issues[idx].url; }
 
     void openRow(int idx) override;
     bool rowKey(TEvent &ev) override;

@@ -1,4 +1,5 @@
 #include "check.h"
+#include "i18n.h"
 #include "util.h"
 
 #include <cstdlib>
@@ -26,8 +27,19 @@ TEST("duration: минуты и часы")
     CHECK_EQ(util::duration(-1), std::string(""));
 }
 
-TEST("ago: единицы измерения")
+TEST("ago: единицы измерения, английский")
 {
+    gLang = Lang::En;
+    time_t now = 1791885600;
+    CHECK_EQ(util::ago(now - 5, now), std::string("5s"));
+    CHECK_EQ(util::ago(now - 180, now), std::string("3 min"));
+    CHECK_EQ(util::ago(now - 7200, now), std::string("2 h"));
+    CHECK_EQ(util::ago(now - 4 * 86400, now), std::string("4 d"));
+}
+
+TEST("ago: единицы измерения, русский")
+{
+    gLang = Lang::Ru;
     time_t now = 1791885600;
     CHECK_EQ(util::ago(now - 5, now), std::string("5 с"));
     CHECK_EQ(util::ago(now - 180, now), std::string("3 мин"));
@@ -35,12 +47,29 @@ TEST("ago: единицы измерения")
     CHECK_EQ(util::ago(now - 4 * 86400, now), std::string("4 дн"));
     CHECK_EQ(util::ago(now + 30, now), std::string("0 с"));
     CHECK_EQ(util::ago(0, now), std::string(""));
+    gLang = Lang::En;
 }
 
-TEST("localTime: дата и время")
+TEST("localTime: формат даты зависит от языка")
 {
+    gLang = Lang::En;
+    CHECK_EQ(util::localTime(1791885600), std::string("26-10-13 10:00"));
+    gLang = Lang::Ru;
     CHECK_EQ(util::localTime(1791885600), std::string("13.10.26 10:00"));
+    gLang = Lang::En;
     CHECK_EQ(util::localTime(0), std::string(""));
+}
+
+TEST("trPair: выбор части по языку")
+{
+    gLang = Lang::En;
+    CHECK_EQ(trPair("When|Когда"), std::string("When"));
+    CHECK_EQ(trPair("PR repo#3"), std::string("PR repo#3"));
+    gLang = Lang::Ru;
+    CHECK_EQ(trPair("When|Когда"), std::string("Когда"));
+    CHECK_EQ(std::string(L("Yes", "Да")), std::string("Да"));
+    gLang = Lang::En;
+    CHECK_EQ(std::string(L("Yes", "Да")), std::string("Yes"));
 }
 
 TEST("splitList: запятые, пробелы, точки с запятой")

@@ -1,4 +1,5 @@
 #include "poller.h"
+#include "i18n.h"
 #include "util.h"
 
 #include <algorithm>
@@ -58,7 +59,9 @@ Poller::State Poller::snapshot() const
         s.error = reposError_;
     else if (!errors_.empty())
     {
-        s.error = errors_.begin()->first + ": " + errors_.begin()->second;
+        const std::string &key = errors_.begin()->first;
+        s.error = (key == "#search" ? std::string(L("issues search", "поиск issues")) : key) + ": " +
+                  errors_.begin()->second;
         if (errors_.size() > 1)
             s.error += " (+" + std::to_string(errors_.size() - 1) + ")";
     }
@@ -147,7 +150,7 @@ void Poller::loadRepos()
         reposAt_ = time(nullptr);
         if (!ok)
         {
-            reposError_ = "список репозиториев: " + err;
+            reposError_ = L("repository list: ", "список репозиториев: ") + err;
         }
         else
         {
@@ -275,7 +278,7 @@ void Poller::pollForeignIssues()
         std::lock_guard<std::mutex> lock(m_);
         if (ok)
         {
-            errors_.erase("поиск issues");
+            errors_.erase("#search");
             if (!changed)
                 return;
             for (auto &i : list)
@@ -283,7 +286,7 @@ void Poller::pollForeignIssues()
             foreignIssues_ = std::move(list);
         }
         else
-            errors_["поиск issues"] = err;
+            errors_["#search"] = err;
     }
     bump();
 }

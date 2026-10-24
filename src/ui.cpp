@@ -11,38 +11,38 @@ StatusLook lookOf(const std::string &status, const std::string &conclusion)
     if (status == "completed")
     {
         if (conclusion == "success")
-            return {"✔", "успех", 0xA};
+            return {"✔", L("success", "успех"), 0xA};
         if (conclusion == "failure")
-            return {"✘", "ошибка", 0xC};
+            return {"✘", L("failure", "ошибка"), 0xC};
         if (conclusion == "timed_out")
-            return {"✘", "таймаут", 0xC};
+            return {"✘", L("timed out", "таймаут"), 0xC};
         if (conclusion == "startup_failure")
-            return {"✘", "сбой старта", 0xC};
+            return {"✘", L("startup failure", "сбой старта"), 0xC};
         if (conclusion == "cancelled")
-            return {"⊘", "отменён", 0x7};
+            return {"⊘", L("cancelled", "отменён"), 0x7};
         if (conclusion == "skipped")
-            return {"»", "пропущен", 0x7};
+            return {"»", L("skipped", "пропущен"), 0x7};
         if (conclusion == "neutral")
-            return {"○", "нейтрально", 0x7};
+            return {"○", L("neutral", "нейтрально"), 0x7};
         if (conclusion == "action_required")
-            return {"!", "нужно действие", 0xD};
+            return {"!", L("action required", "нужно действие"), 0xD};
         if (conclusion == "stale")
-            return {"~", "устарел", 0x7};
-        return {"?", conclusion.empty() ? "завершён" : conclusion, 0x7};
+            return {"~", L("stale", "устарел"), 0x7};
+        return {"?", conclusion.empty() ? L("completed", "завершён") : conclusion, 0x7};
     }
     if (status == "in_progress")
     {
         static const char *spin[] = {"◐", "◓", "◑", "◒"};
-        return {spin[time(nullptr) % 4], "выполняется", 0xE};
+        return {spin[time(nullptr) % 4], L("in progress", "выполняется"), 0xE};
     }
     if (status == "queued")
-        return {"◌", "в очереди", 0xD};
+        return {"◌", L("queued", "в очереди"), 0xD};
     if (status == "waiting")
-        return {"◌", "ожидает", 0xD};
+        return {"◌", L("waiting", "ожидает"), 0xD};
     if (status == "pending")
-        return {"◌", "ожидает", 0xD};
+        return {"◌", L("waiting", "ожидает"), 0xD};
     if (status == "requested")
-        return {"◌", "запрошен", 0xD};
+        return {"◌", L("requested", "запрошен"), 0xD};
     return {"?", status, 0x7};
 }
 
@@ -95,7 +95,7 @@ RunCategory ciCategory(const std::vector<Run> &prRuns)
 StatusLook ciLook(const std::vector<Run> &prRuns)
 {
     if (prRuns.empty())
-        return {"·", "нет CI", 0x7};
+        return {"·", L("no CI", "нет CI"), 0x7};
     // Показать самый «важный» запуск: активный, затем упавший, затем прочие
     const Run *pick = &prRuns.front();
     RunCategory cat = ciCategory(prRuns);
@@ -139,25 +139,39 @@ void putCell(TDrawBuffer &b, int x, int width, const std::string &text, TColorAt
 
 void showHelp()
 {
-    const char *text =
-        "Enter  открыть запуск / лог\n"
-        "F3     лог упавшего job\n"
-        "F5 r   перезапустить\n"
-        "F6 f   перезапустить упавшие job\n"
-        "F7 c   отменить\n"
-        "F8 Del удалить запуск\n"
-        "Shift+F8 удалить только логи\n"
-        "Ins    отметить, + все, - снять\n"
-        "1..5   фильтр: все/активные/упавшие/успешные/прочие\n"
-        "/      поиск (Ctrl+F)\n"
-        "l      только последний запуск workflow+ветка\n"
-        "F2     следующее окно: запуски, PR, issues\n"
-        "Alt+1/2/3  запуски / PR / issues\n"
-        "Щелчок по заголовку столбца — сортировка\n"
-        "Backspace  то же, что Esc (назад)\n"
-        "s      сортировка по следующему столбцу\n"
-        "Ctrl+R обновить всё\n"
-        "Esc    закрыть окно";
+    const char *text = L(
+        "Enter    open row: run, PR, issue, log\n"
+        "o        open in browser (Ctrl+Enter)\n"
+        "F3       log of the failed job\n"
+        "F5 r     rerun\n"
+        "F6 f     rerun failed jobs\n"
+        "F7 c     cancel\n"
+        "F8 Del   delete run;  Shift+F8 delete logs only\n"
+        "Ins      mark;  + mark all;  - unmark\n"
+        "1..5     filter: all/active/failed/successful/other\n"
+        "/        search (Ctrl+F)\n"
+        "l        latest run per workflow and branch\n"
+        "s        sort by next column; click a header to sort\n"
+        "F2       next window: runs, PRs, issues (Alt+1/2/3)\n"
+        "Ctrl+L   language: English / Русский\n"
+        "Ctrl+R   refresh everything\n"
+        "Esc, Backspace  back / close window",
+        "Enter    открыть строку: запуск, PR, issue, лог\n"
+        "o        открыть в браузере (Ctrl+Enter)\n"
+        "F3       лог упавшего job\n"
+        "F5 r     перезапустить\n"
+        "F6 f     перезапустить упавшие job\n"
+        "F7 c     отменить\n"
+        "F8 Del   удалить запуск;  Shift+F8 только логи\n"
+        "Ins      отметить;  + все;  - снять\n"
+        "1..5     фильтр: все/активные/упавшие/успешные/прочие\n"
+        "/        поиск (Ctrl+F)\n"
+        "l        последний запуск workflow и ветки\n"
+        "s        сортировка по следующему столбцу; щелчок по заголовку\n"
+        "F2       следующее окно: запуски, PR, issues (Alt+1/2/3)\n"
+        "Ctrl+L   язык: English / Русский\n"
+        "Ctrl+R   обновить всё\n"
+        "Esc, Backspace  назад / закрыть окно");
     msgBox(text, mfInformation | mfOKButton);
 }
 
@@ -183,8 +197,9 @@ ushort msgBox(const std::string &text, ushort options)
     r.move((d.x - bw) / 2, (d.y - bh) / 2);
 
     // Свой диалог вместо messageBox: подписи tvision зашиты по-английски
-    static const char *titles[] = {"Внимание", "Ошибка", "Информация", "Подтверждение"};
-    static const char *names[] = {"Да", "Нет", "OK", "Отмена"};
+    const char *titles[] = {L("Warning", "Внимание"), L("Error", "Ошибка"), L("Information", "Информация"),
+                            L("Confirm", "Подтверждение")};
+    const char *names[] = {L("Yes", "Да"), L("No", "Нет"), "OK", L("Cancel", "Отмена")};
     static const ushort cmds[] = {cmYes, cmNo, cmOK, cmCancel};
 
     TDialog *dlg = new TDialog(r, titles[options & 0x3]);

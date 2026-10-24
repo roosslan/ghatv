@@ -57,6 +57,8 @@ class LogWindow : public TWindow
 public:
     LogWindow(const TRect &r, const std::string &repo, int64_t jobId, const std::string &title,
               const std::string &jump);
+    // Страница job на github.com
+    std::string url() const;
 
     void handleEvent(TEvent &ev) override;
     void shutDown() override;
@@ -77,6 +79,8 @@ class DiscussionWindow : public TWindow
 {
 public:
     DiscussionWindow(const TRect &r, const std::string &repo, int number, const std::string &title);
+    // Страница issue или PR на github.com (GitHub сам перенаправляет issue на PR)
+    std::string url() const;
 
     void handleEvent(TEvent &ev) override;
     void shutDown() override;

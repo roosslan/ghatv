@@ -12,14 +12,14 @@ enum Col { ColWhen, ColStatus, ColRepo, ColWorkflow, ColBranch, ColEvent, ColTit
 std::vector<ColumnDef> runColumns()
 {
     std::vector<ColumnDef> c(8);
-    c[ColWhen] = {"Когда", 14, 0, 0, false, 0, true};
-    c[ColStatus] = {"Статус", 14};
-    c[ColRepo] = {"Репозиторий", 0, 26, 30};
+    c[ColWhen] = {"When|Когда", 14, 0, 0, false, 0, true};
+    c[ColStatus] = {"Status|Статус", 14};
+    c[ColRepo] = {"Repository|Репозиторий", 0, 26, 30};
     c[ColWorkflow] = {"Workflow", 0, 22, 26};
-    c[ColBranch] = {"Ветка", 0, 14, 20};
-    c[ColEvent] = {"Событие", 12, 0, 0, false, 130};
-    c[ColTitle] = {"Заголовок"};
-    c[ColDur] = {"Длит.", 8, 0, 0, true, 0, true};
+    c[ColBranch] = {"Branch|Ветка", 0, 14, 20};
+    c[ColEvent] = {"Event|Событие", 12, 0, 0, false, 130};
+    c[ColTitle] = {"Title|Заголовок"};
+    c[ColDur] = {"Dur.|Длит.", 8, 0, 0, true, 0, true};
     return c;
 }
 
@@ -82,7 +82,7 @@ int statusRank(const Run &r)
 
 RunsWindow::RunsWindow(const TRect &r) :
     TWindowInit(&TWindow::initFrame),
-    TableWindow(r, "Запуски", 1, runColumns(), 1)
+    TableWindow(r, "Runs|Запуски", 1, runColumns(), 1)
 {
 }
 
@@ -194,27 +194,27 @@ std::string RunsWindow::leadText(int idx, uchar &fore) const
 
 std::string RunsWindow::infoText() const
 {
-    static const char *names[] = {"все", "активные", "упавшие", "успешные", "прочие"};
+    const char *names[] = {L("all", "все"), L("active", "активные"), L("failed", "упавшие"), L("successful", "успешные"), L("other", "прочие")};
     std::string s;
     if (!st_.reposLoaded && st_.error.empty())
-        s = "Загрузка списка репозиториев…";
+        s = L("Loading repository list…", "Загрузка списка репозиториев…");
     else
-        s = "Репозиториев: " + std::to_string(st_.repoCount) + "  запусков: " + std::to_string(st_.runs.size()) +
-            "  показано: " + std::to_string(rowCount());
-    s += " │ фильтр: ";
+        s = L("Repositories: ", "Репозиториев: ") + std::to_string(st_.repoCount) + L("  runs: ", "  запусков: ") + std::to_string(st_.runs.size()) +
+            L("  shown: ", "  показано: ") + std::to_string(rowCount());
+    s += L(" │ filter: ", " │ фильтр: ");
     s += names[(int) filter_];
     if (latestOnly_)
-        s += ", последние";
+        s += L(", latest", ", последние");
     s += " │ " + viewState();
     if (!marked_.empty())
-        s += " │ отмечено: " + std::to_string(marked_.size());
+        s += L(" │ marked: ", " │ отмечено: ") + std::to_string(marked_.size());
     int rem = gApp->gh().rateRemaining(), lim = gApp->gh().rateLimit();
     if (rem >= 0)
         s += " │ API: " + std::to_string(rem) + "/" + std::to_string(lim);
     if (st_.busy)
-        s += " │ ⟳ обновление";
+        s += L(" │ ⟳ updating", " │ ⟳ обновление");
     else if (st_.lastSync)
-        s += " │ обновлено " + util::ago(st_.lastSync, time(nullptr)) + " назад";
+        s += L(" │ updated ", " │ обновлено ") + util::ago(st_.lastSync, time(nullptr)) + L(" ago", " назад");
     if (!st_.error.empty())
         s += " │ ⚠ " + st_.error;
     return s;

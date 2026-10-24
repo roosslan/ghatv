@@ -12,13 +12,13 @@ enum Col { ColUpdated, ColRepo, ColNumber, ColTitle, ColLabels, ColAuthor, ColCo
 std::vector<ColumnDef> issueColumns()
 {
     std::vector<ColumnDef> c(7);
-    c[ColUpdated] = {"Обновлён", 14, 0, 0, false, 0, true};
-    c[ColRepo] = {"Репозиторий", 0, 28, 36};
+    c[ColUpdated] = {"Updated|Обновлён", 14, 0, 0, false, 0, true};
+    c[ColRepo] = {"Repository|Репозиторий", 0, 28, 36};
     c[ColNumber] = {"#", 6, 0, 0, true, 0, true};
-    c[ColTitle] = {"Заголовок"};
-    c[ColLabels] = {"Метки", 0, 18, 28};
-    c[ColAuthor] = {"Автор", 14, 0, 0, false, 110};
-    c[ColComments] = {"Комм.", 6, 0, 0, true, 0, true};
+    c[ColTitle] = {"Title|Заголовок"};
+    c[ColLabels] = {"Labels|Метки", 0, 18, 28};
+    c[ColAuthor] = {"Author|Автор", 14, 0, 0, false, 110};
+    c[ColComments] = {"Comm.|Комм.", 6, 0, 0, true, 0, true};
     return c;
 }
 
@@ -114,21 +114,21 @@ int IssuesWindow::compare(int a, int b, int col) const
 
 std::string IssuesWindow::infoText() const
 {
-    static const char *names[] = {"все", "в моих репозиториях", "мои в чужих"};
+    const char *names[] = {L("all", "все"), L("in my repositories", "в моих репозиториях"), L("mine elsewhere", "мои в чужих")};
     int foreign = 0;
     for (auto &i : st_.issues)
         foreign += i.foreign;
     std::string s;
     if (!st_.reposLoaded && st_.error.empty())
-        s = "Загрузка списка репозиториев…";
+        s = L("Loading repository list…", "Загрузка списка репозиториев…");
     else
-        s = "Issues: " + std::to_string(st_.issues.size()) + " (в моих: " +
-            std::to_string(st_.issues.size() - foreign) + ", в чужих: " + std::to_string(foreign) +
-            ")  показано: " + std::to_string(rowCount());
-    s += " │ фильтр: ";
+        s = "Issues: " + std::to_string(st_.issues.size()) + L(" (mine: ", " (в моих: ") +
+            std::to_string(st_.issues.size() - foreign) + L(", elsewhere: ", ", в чужих: ") + std::to_string(foreign) +
+            L(")  shown: ", ")  показано: ") + std::to_string(rowCount());
+    s += L(" │ filter: ", " │ фильтр: ");
     s += names[(int) filter_];
     s += " │ " + viewState();
-    s += " │ Enter — открыть, 1/2/3 — фильтр";
+    s += L(" │ Enter — open, o — browser, 1/2/3 — filter", " │ Enter — открыть, 1/2/3 — фильтр");
     if (!st_.error.empty())
         s += " │ ⚠ " + st_.error;
     return s;

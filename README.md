@@ -1,15 +1,12 @@
 # ghatv
 
-[![CI](https://github.com/roosslan/ghatv/actions/workflows/ci.yml/badge.svg)](https://github.com/roosslan/ghatv/actions/workflows/ci.yml)
-[![Релиз](https://img.shields.io/github/v/release/roosslan/ghatv)](https://github.com/roosslan/ghatv/releases)
-
-Текстовая панель GitHub Actions по всем репозиториям аккаунта в стиле файлового менеджера. Интерфейс построен на [Turbo Vision](https://github.com/magiblot/tvision) и открывается в браузере через [ttyd](https://github.com/tsl0922/ttyd). Всё работает в одном Docker-контейнере.
+turbo-vision панель GitHub Actions по всем репозиториям аккаунта в стиле файлового менеджера. Интерфейс на turbo vision открывается в браузере через [ttyd](https://github.com/tsl0922/ttyd). Всё работает в одном Docker-контейнере.
 
 ```
 браузер ──ws──> ttyd ──pty──> ghatv (C++/tvision) ──HTTPS──> api.github.com
 ```
 
-![Запуски, запуск, лог, pull request'ы, карточка PR, issues](docs/screenshot.gif)
+![screenshot](docs/screenshot.gif)
 
 ## Возможности
 
@@ -22,6 +19,8 @@
 - Действия: перезапуск, перезапуск только упавших job, отмена, удаление запуска, удаление только логов. Действия применяются к текущей строке или ко всем отмеченным.
 - Окно открытых pull request'ов. Статус CI определяется по уже загруженным запускам для последнего коммита PR, без дополнительных запросов. Enter или двойной щелчок открывает карточку PR: ветки, число коммитов и файлов, состояние слияния и все запуски CI для последнего коммита; из карточки открываются описание и комментарии.
 - Окно открытых issues: issues в своих репозиториях и issues, созданные пользователем в чужих репозиториях (через поиск GitHub). Enter открывает описание и комментарии.
+- Интерфейс на английском (по умолчанию) и русском языках; язык переключается на лету клавишей Ctrl+L.
+- Открытие запуска, PR, issue, job или обсуждения на github.com в новой вкладке браузера (клавиша `o`).
 - Опрос с ETag. Ответы 304 не расходуют лимит API. Репозитории с активными запусками опрашиваются чаще.
 
 ## Токен
@@ -43,7 +42,7 @@ Issues, созданные в чужих репозиториях, ищутся 
 GH_TOKEN=$(gh auth token) docker compose up -d --build
 ```
 
-Затем открыть http://localhost:7681.
+Затем открыть http://localhost:7681. Для русского интерфейса — http://localhost:7681/?arg=--lang=ru (или переменная `GHATV_LANG=ru`).
 
 Готовый образ из GitHub Container Registry (собирается CI из ветки `trunk` и тегов релизов):
 
@@ -82,6 +81,7 @@ docker run -d --name ghatv -p 127.0.0.1:7681:7681 -e GH_TOKEN=$(gh auth token) -
 | `GHATV_PULLS` | `true` | опрашивать открытые pull request'ы (с интервалом `GHATV_INTERVAL`) |
 | `GHATV_ISSUES` | `true` | опрашивать открытые issues (с интервалом `GHATV_INTERVAL`) |
 | `GHATV_THREADS` | `6` | число параллельных запросов при опросе |
+| `GHATV_LANG` | `en` | язык интерфейса: `en` или `ru`; аргумент `--lang` (в том числе из адреса `?arg=--lang=ru`) имеет приоритет |
 | `GITHUB_API_URL` | `https://api.github.com` | адрес API |
 | `TZ` | — | часовой пояс для отображения времени |
 
@@ -93,6 +93,8 @@ docker run -d --name ghatv -p 127.0.0.1:7681:7681 -e GH_TOKEN=$(gh auth token) -
 |---|---|
 | Enter, двойной щелчок | открыть строку: запуск, карточку PR, issue; в окне запуска — лог job или шага |
 | Esc, Backspace | назад: закрыть текущее окно (в диалогах Backspace стирает текст) |
+| o, Ctrl+Enter | открыть текущий объект на github.com в новой вкладке браузера |
+| Ctrl+L | язык интерфейса: English / Русский |
 | F3 | лог упавшего job |
 | F5, r | перезапустить |
 | F6, f | перезапустить упавшие job |
@@ -121,7 +123,6 @@ docker run -d --name ghatv -p 127.0.0.1:7681:7681 -e GH_TOKEN=$(gh auth token) -
 
 В окне лога: `/` поиск, `n`/`N` следующее/предыдущее совпадение, `e`/`E` следующая/предыдущая ошибка, `g`/`G` начало/конец.
 
-Буквенные клавиши работают и в русской раскладке.
 
 ## Сборка без Docker
 
@@ -137,22 +138,6 @@ cmake --build build -j
 
 Бинарник для Linux x86_64 (без ttyd, запускается прямо в терминале) прикладывается к каждому [релизу](https://github.com/roosslan/ghatv/releases). Он собран в Debian 12 и требует glibc 2.36 или новее, libcurl4 и libncursesw6.
 
-## Тесты
-
-Модульные тесты проверяют разбор ответов GitHub API, разбор логов, перенос текста, сводный статус CI и вспомогательные функции. Сеть для них не нужна.
-
-```bash
-cmake -S . -B build -DGHATV_TESTS=ON
-```
-
-```bash
-cmake --build build -j
-```
-
-```bash
-ctest --test-dir build --output-on-failure
-```
-
 ## CI и релизы
 
 - `.github/workflows/ci.yml` — на каждый push и pull request: сборка, тесты, сборка Docker-образа. Из ветки `trunk` и тегов образ публикуется в `ghcr.io/roosslan/ghatv`.
@@ -160,15 +145,6 @@ ctest --test-dir build --output-on-failure
 
 Для выпуска релиза необходимо поднять версию в `project(ghatv VERSION ...)` в `CMakeLists.txt` и создать тег с той же версией, например `v0.2.0`. Если тег не совпадает с версией в `CMakeLists.txt`, релиз не создаётся.
 
-## Скриншот
-
-`docs/screenshot.gif` создаётся скриптом `tools/screenshot.py`: ghatv запускается в виртуальном терминале (pyte), после каждого набора нажатий снимается кадр, кадры собираются в GIF (для имени файла `.png` сохраняется один снимок). Для обновления анимации необходимо собрать образ и выполнить:
-
-```bash
-docker run --rm -e GH_TOKEN=$(gh auth token) -e TZ=Europe/Moscow -v "$PWD:/work" --entrypoint sh ghatv:latest -c "apt-get update -qq && apt-get install -y -qq python3-pyte python3-pil python3-fonttools fonts-dejavu-core && python3 /work/tools/screenshot.py --out /work/docs/screenshot.gif --wait 25 --key-wait 5 --keys '\r' --keys '\x1b[B|\r' --keys '\x1b|\x1b|\x1b2' --keys '\x1b[B|\r' --keys '\x1b|\x1b3'"
-```
-
-Каждый `--keys` — нажатия перед очередным кадром, разделённые `|`: `\r` — Enter, `\x1b` — Esc, `\x1b[B` — стрелка вниз, `\x1b2` — Alt+2.
 
 ## Структура
 
@@ -182,10 +158,4 @@ docker run --rm -e GH_TOKEN=$(gh auth token) -e TZ=Europe/Moscow -v "$PWD:/work"
 - `src/run_window.*` — окно запуска: jobs, steps, annotations;
 - `src/log_window.*` — просмотр лога job, описания и комментариев;
 - `src/main.cpp` — приложение, меню, строка состояния, действия над запусками;
-- `tests/` — модульные тесты;
-- `tools/screenshot.py` — создание анимации для README;
-- `.github/workflows/` — CI и релизы.
 
-## Лицензия
-
-[MIT](LICENSE).

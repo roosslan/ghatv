@@ -31,8 +31,9 @@ public:
     void postFilter(std::vector<int> &rows) const override;
     std::string leadText(int idx, uchar &fore) const override;
     bool marked(int idx) const override { return marked_.count(st_.runs[idx].id) > 0; }
-    std::string emptyText() const override { return "Нет запусков для отображения"; }
+    std::string emptyText() const override { return L("No runs to show", "Нет запусков для отображения"); }
     std::string infoText() const override;
+    std::string rowUrl(int idx) const override { return st_.runs[idx].url; }
 
     void openRow(int idx) override;
     bool rowKey(TEvent &ev) override;

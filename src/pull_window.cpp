@@ -13,12 +13,12 @@ enum Col { ColWhen, ColStatus, ColWorkflow, ColEvent, ColAttempt, ColDur };
 std::vector<ColumnDef> runColumns()
 {
     std::vector<ColumnDef> c(6);
-    c[ColWhen] = {"Когда", 14, 0, 0, false, 0, true};
-    c[ColStatus] = {"Статус", 14};
+    c[ColWhen] = {"When|Когда", 14, 0, 0, false, 0, true};
+    c[ColStatus] = {"Status|Статус", 14};
     c[ColWorkflow] = {"Workflow"};
-    c[ColEvent] = {"Событие", 14};
-    c[ColAttempt] = {"Попытка", 8, 0, 0, true};
-    c[ColDur] = {"Длит.", 8, 0, 0, true, 0, true};
+    c[ColEvent] = {"Event|Событие", 14};
+    c[ColAttempt] = {"Attempt|Попытка", 8, 0, 0, true};
+    c[ColDur] = {"Dur.|Длит.", 8, 0, 0, true, 0, true};
     return c;
 }
 
@@ -32,20 +32,20 @@ long runDuration(const Run &r)
 std::string mergeText(const std::string &s)
 {
     if (s == "clean")
-        return "можно слить";
+        return L("can be merged", "можно слить");
     if (s == "dirty")
-        return "конфликты";
+        return L("conflicts", "конфликты");
     if (s == "blocked")
-        return "слияние заблокировано";
+        return L("merge blocked", "слияние заблокировано");
     if (s == "behind")
-        return "отстаёт от базы";
+        return L("behind base", "отстаёт от базы");
     if (s == "unstable")
-        return "проверки не пройдены";
+        return L("checks failing", "проверки не пройдены");
     if (s == "draft")
-        return "черновик";
+        return L("draft", "черновик");
     if (s == "has_hooks")
-        return "можно слить (есть хуки)";
-    return "состояние слияния вычисляется";
+        return L("can be merged (hooks)", "можно слить (есть хуки)");
+    return L("merge state is being computed", "состояние слияния вычисляется");
 }
 
 } // namespace
@@ -68,17 +68,17 @@ void PullInfoView::draw()
     putCell(b, 0, size.x, " #" + std::to_string(p.number) + "  " + p.title, h);
     writeLine(0, 0, size.x, 1, b);
 
-    std::string l1 = " " + p.repo + " · автор " + p.author + " · " + p.headRef + " → " + p.baseRef;
+    std::string l1 = " " + p.repo + L(" · author ", " · автор ") + p.author + " · " + p.headRef + " → " + p.baseRef;
     if (p.draft)
-        l1 += " · черновик";
+        l1 += L(" · draft", " · черновик");
     putCell(b, 0, size.x, l1, n);
     writeLine(0, 1, size.x, 1, b);
 
-    std::string l2 = " создан " + util::localTime(p.createdAt) + " · обновлён " + util::localTime(p.updatedAt);
+    std::string l2 = L(" created ", " создан ") + util::localTime(p.createdAt) + L(" · updated ", " · обновлён ") + util::localTime(p.updatedAt);
     if (w_->hasDetails())
     {
         auto &dt = w_->details();
-        l2 += " · коммитов " + std::to_string(dt.commits) + " · файлов " + std::to_string(dt.changedFiles) + " · +" +
+        l2 += L(" · commits ", " · коммитов ") + std::to_string(dt.commits) + L(" · files ", " · файлов ") + std::to_string(dt.changedFiles) + " · +" +
               std::to_string(dt.additions) + " −" + std::to_string(dt.deletions) + " · " +
               mergeText(dt.mergeableState);
     }
@@ -87,11 +87,11 @@ void PullInfoView::draw()
     putCell(b, 0, size.x, l2, n);
     writeLine(0, 2, size.x, 1, b);
 
-    std::string l3 = " ▸ Описание и комментарии";
+    std::string l3 = L(" ▸ Description and comments", " ▸ Описание и комментарии");
     if (w_->hasDetails())
-        l3 += " (" + std::to_string(w_->details().comments) + " комм., " +
-              std::to_string(w_->details().reviewComments) + " в ревью)";
-    l3 += " — клавиша d или щелчок";
+        l3 += " (" + std::to_string(w_->details().comments) + L(" comments, ", " комм., ") +
+              std::to_string(w_->details().reviewComments) + L(" in review)", " в ревью)");
+    l3 += L(" — key d or click", " — клавиша d или щелчок");
     putCell(b, 0, size.x, l3, withFore(clr::Normal, 0xF));
     writeLine(0, 3, size.x, 1, b);
 
@@ -217,17 +217,17 @@ int PullWindow::compare(int a, int b, int col) const
 std::string PullWindow::emptyText() const
 {
     if (loading_)
-        return "Загрузка…";
+        return L("Loading…", "Загрузка…");
     if (!error_.empty())
-        return "Ошибка: " + error_;
-    return "Для последнего коммита PR нет запусков workflow";
+        return L("Error: ", "Ошибка: ") + error_;
+    return L("No workflow runs for the latest PR commit", "Для последнего коммита PR нет запусков workflow");
 }
 
 std::string PullWindow::infoText() const
 {
-    std::string s = "Запусков для коммита " + pr_.headSha.substr(0, 7) + ": " + std::to_string(runs_.size());
+    std::string s = L("Runs for commit ", "Запусков для коммита ") + pr_.headSha.substr(0, 7) + ": " + std::to_string(runs_.size());
     s += " │ " + viewState();
-    s += " │ Enter — запуск, d — описание и комментарии, F3 — лог, Esc/Backspace — назад";
+    s += L(" │ Enter — run, d — description and comments, o — browser, F3 — log, Esc/Backspace — back", " │ Enter — запуск, d — описание и комментарии, F3 — лог, Esc/Backspace — назад");
     if (!error_.empty())
         s += " │ ⚠ " + error_;
     return s;

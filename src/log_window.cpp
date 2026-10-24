@@ -262,7 +262,7 @@ void LogView::draw()
         }
         else if (lines_.empty() && y == size.y / 2)
         {
-            std::string msg = message_.empty() ? "Загрузка лога…" : message_;
+            std::string msg = message_.empty() ? L("Loading log…", "Загрузка лога…") : message_;
             int w = (int) TText::width(msg);
             b.moveStr(std::max(0, (size.x - w) / 2), msg, TColorAttr(0x0E), size.x);
         }
@@ -286,7 +286,7 @@ void LogView::findNext(int dir)
             return;
         }
     }
-    msgBox("Не найдено: " + search_, mfInformation | mfOKButton);
+    msgBox(L("Not found: ", "Не найдено: ") + search_, mfInformation | mfOKButton);
 }
 
 void LogView::nextError(int dir)
@@ -306,7 +306,7 @@ void LogView::search()
     char buf[128];
     strncpy(buf, search_.c_str(), sizeof(buf) - 1);
     buf[sizeof(buf) - 1] = '\0';
-    if (inputBox("Поиск в логе", "Текст:", buf, sizeof(buf) - 1) != cmCancel && buf[0])
+    if (inputBox(L("Search in log", "Поиск в логе"), L("Text:", "Текст:"), buf, sizeof(buf) - 1) != cmCancel && buf[0])
     {
         search_ = buf;
         findNext(1);
@@ -315,13 +315,13 @@ void LogView::search()
 
 std::string LogView::infoText() const
 {
-    std::string s = "строка " + std::to_string(std::min<int>(delta.y + 1, (int) lines_.size())) + "/" +
+    std::string s = L("line ", "строка ") + std::to_string(std::min<int>(delta.y + 1, (int) lines_.size())) + "/" +
                     std::to_string(lines_.size());
     if (hint_.empty())
-        s += " │ ошибок: " + std::to_string(errors_);
+        s += L(" │ errors: ", " │ ошибок: ") + std::to_string(errors_);
     if (!search_.empty())
-        s += " │ поиск: «" + search_ + "»";
-    s += hint_.empty() ? " │ / поиск  n/N дальше/назад  e/E ошибка  g/G начало/конец  Esc/Backspace — назад"
+        s += L(" │ search: «", " │ поиск: «") + search_ + "»";
+    s += hint_.empty() ? L(" │ / search  n/N next/prev  e/E error  g/G top/bottom  o browser  Esc/Backspace — back", " │ / поиск  n/N дальше/назад  e/E ошибка  g/G начало/конец  Esc/Backspace — назад")
                        : " │ " + hint_;
     return s;
 }
@@ -350,6 +350,12 @@ void LogView::handleEvent(TEvent &ev)
             scrollTo(0, 0);
         else if (keyIs(ev, "G", "П"))
             scrollTo(0, std::max(0, limit.y - size.y));
+        else if (keyIs(ev, "o", "щ"))
+        {
+            clearEvent(ev);
+            message(owner, evCommand, cmOpenBrowser, nullptr);
+            return;
+        }
         else
             handled = false;
         if (handled)
@@ -383,7 +389,7 @@ void LogInfo::draw()
 LogWindow::LogWindow(const TRect &r, const std::string &repo, int64_t jobId, const std::string &title,
                      const std::string &jump) :
     TWindowInit(&TWindow::initFrame),
-    TWindow(r, ("лог: " + title).c_str(), wnNoNumber),
+    TWindow(r, (L("log: ", "лог: ") + title).c_str(), wnNoNumber),
     repo_(repo),
     jobId_(jobId),
     jump_(jump),
@@ -405,6 +411,12 @@ LogWindow::LogWindow(const TRect &r, const std::string &repo, int64_t jobId, con
     load();
 }
 
+std::string LogWindow::url() const
+{
+    // Адрес check run: GitHub перенаправляет его на страницу job
+    return "https://github.com/" + repo_ + "/runs/" + std::to_string(jobId_);
+}
+
 void LogWindow::shutDown()
 {
     *alive_ = false;
@@ -418,7 +430,7 @@ void LogWindow::load()
     auto alive = alive_;
     std::string repo = repo_, jump = jump_;
     int64_t id = jobId_;
-    view_->setMessage("Загрузка лога…");
+    view_->setMessage(L("Loading log…", "Загрузка лога…"));
     gApp->async([this, alive, repo, id, jump] {
         std::string raw, err;
         bool ok = gApp->gh().jobLog(repo, id, raw, err);
@@ -428,10 +440,10 @@ void LogWindow::load()
             if (!*alive || !view_)
                 return;
             if (!ok)
-                view_->setMessage("Не удалось получить лог: " + err +
-                                  (err.find("404") != std::string::npos ? " (лог появится после завершения job)" : ""));
+                view_->setMessage(L("Failed to get log: ", "Не удалось получить лог: ") + err +
+                                  (err.find("404") != std::string::npos ? L(" (the log appears after the job finishes)", " (лог появится после завершения job)") : ""));
             else if (lines->empty())
-                view_->setMessage("Лог пуст");
+                view_->setMessage(L("Log is empty", "Лог пуст"));
             else
                 view_->setLines(std::move(*lines), maxW, jump);
             redraw();
@@ -454,6 +466,8 @@ void LogWindow::handleEvent(TEvent &ev)
             view_->search();
         else if (ev.message.command == cmRefresh)
             load();
+        else if (ev.message.command == cmOpenBrowser)
+            gApp->openUrl(url());
         else
             return;
         clearEvent(ev);
@@ -504,18 +518,18 @@ std::vector<LogLine> renderDiscussion(const Discussion &d, int number, int width
 {
     std::vector<LogLine> out;
     addLine(out, "#" + std::to_string(number) + "  " + d.title, 0x0F);
-    std::string meta = "автор " + d.author + " · создан " + util::localTime(d.createdAt) + " · " +
-                       (d.state == "open" ? "открыт" : d.state == "closed" ? "закрыт" : d.state);
+    std::string meta = L("author ", "автор ") + d.author + L(" · created ", " · создан ") + util::localTime(d.createdAt) + " · " +
+                       (d.state == "open" ? L("open", "открыт") : d.state == "closed" ? L("closed", "закрыт") : d.state);
     if (!d.labels.empty())
     {
-        meta += " · метки:";
+        meta += L(" · labels:", " · метки:");
         for (auto &l : d.labels)
             meta += " [" + l + "]";
     }
     addLine(out, meta, 0x0B);
     addLine(out, "", 0x07);
     if (d.body.empty())
-        addLine(out, "(без описания)", 0x08);
+        addLine(out, L("(no description)", "(без описания)"), 0x08);
     else
         addText(out, d.body, width, 0x07);
     for (auto &c : d.comments)
@@ -531,7 +545,7 @@ std::vector<LogLine> renderDiscussion(const Discussion &d, int number, int width
     if (d.comments.empty())
     {
         addLine(out, "", 0x07);
-        addLine(out, "Комментариев нет", 0x08);
+        addLine(out, L("No comments", "Комментариев нет"), 0x08);
     }
     maxW = 0;
     for (auto &l : out)
@@ -557,12 +571,17 @@ DiscussionWindow::DiscussionWindow(const TRect &r, const std::string &repo, int 
     TScrollBar *hs = standardScrollBar(sbHorizontal | sbHandleKeyboard);
     TScrollBar *vs = standardScrollBar(sbVertical | sbHandleKeyboard);
     view_ = new LogView(TRect(e.a.x, e.a.y, e.b.x, e.b.y - 1), hs, vs);
-    view_->setHint("/ поиск  n/N дальше/назад  g/G начало/конец  Esc/Backspace — назад");
+    view_->setHint(L("/ search  n/N next/prev  g/G top/bottom  o browser  Esc/Backspace — back", "/ поиск  n/N дальше/назад  g/G начало/конец  Esc/Backspace — назад"));
     insert(view_);
     info_ = new LogInfo(TRect(e.a.x, e.b.y - 1, e.b.x, e.b.y), view_);
     insert(info_);
     view_->select();
     load();
+}
+
+std::string DiscussionWindow::url() const
+{
+    return "https://github.com/" + repo_ + "/issues/" + std::to_string(number_);
 }
 
 void DiscussionWindow::shutDown()
@@ -579,7 +598,7 @@ void DiscussionWindow::load()
     std::string repo = repo_;
     int number = number_;
     int width = std::max(40, view_->size.x - 1);
-    view_->setMessage("Загрузка…");
+    view_->setMessage(L("Loading…", "Загрузка…"));
     gApp->async([this, alive, repo, number, width] {
         Discussion d;
         std::string err;
@@ -590,7 +609,7 @@ void DiscussionWindow::load()
             if (!*alive || !view_)
                 return;
             if (!ok)
-                view_->setMessage("Не удалось загрузить: " + err);
+                view_->setMessage(L("Failed to load: ", "Не удалось загрузить: ") + err);
             else
                 view_->setLines(std::move(*lines), maxW, "");
             redraw();
@@ -613,6 +632,8 @@ void DiscussionWindow::handleEvent(TEvent &ev)
             view_->search();
         else if (ev.message.command == cmRefresh)
             load();
+        else if (ev.message.command == cmOpenBrowser)
+            gApp->openUrl(url());
         else
             return;
         clearEvent(ev);

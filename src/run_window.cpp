@@ -43,7 +43,7 @@ void RunInfoView::draw()
     x += b.moveStr(x, look.glyph + " " + look.label, withFore(clr::Normal, look.color));
     std::string head = "   " + r.workflow + " #" + std::to_string(r.runNumber);
     if (r.attempt > 1)
-        head += " (попытка " + std::to_string(r.attempt) + ")";
+        head += L(" (attempt ", " (попытка ") + std::to_string(r.attempt) + ")";
     head += "   " + r.repo;
     b.moveStr(x, head, h, size.x - x);
     writeLine(0, 0, size.x, 1, b);
@@ -51,8 +51,8 @@ void RunInfoView::draw()
     putCell(b, 0, size.x, " " + r.title, n);
     writeLine(0, 1, size.x, 1, b);
 
-    std::string meta = " ветка " + r.branch + " · " + r.event + " · автор " + r.actor + " · начат " +
-                       util::localTime(start) + " · длительность " + util::duration((long) (end - start));
+    std::string meta = L(" branch ", " ветка ") + r.branch + " · " + r.event + L(" · author ", " · автор ") + r.actor + L(" · started ", " · начат ") +
+                       util::localTime(start) + L(" · duration ", " · длительность ") + util::duration((long) (end - start));
     if (w_->loading())
         meta += " · ⟳";
     putCell(b, 0, size.x, meta, n);
@@ -292,7 +292,7 @@ void RunWindow::rebuildRows()
     if (rows_.empty() || !error_.empty())
     {
         JobRow m;
-        m.text = !error_.empty() ? "Ошибка: " + error_ : loading_ ? "Загрузка…" : "Нет job";
+        m.text = !error_.empty() ? L("Error: ", "Ошибка: ") + error_ : loading_ ? L("Loading…", "Загрузка…") : L("No jobs", "Нет job");
         rows_.insert(rows_.begin(), m);
     }
     if (list_)
@@ -367,6 +367,8 @@ void RunWindow::handleEvent(TEvent &ev)
             action(RunAction::RerunFailed);
         else if (keyIs(ev, "c", "с"))
             action(RunAction::Cancel);
+        else if (keyIs(ev, "o", "щ"))
+            gApp->openUrl(run_.url);
         else
             return;
         clearEvent(ev);
@@ -404,6 +406,9 @@ void RunWindow::handleEvent(TEvent &ev)
         break;
     case cmRefresh:
         reload();
+        break;
+    case cmOpenBrowser:
+        gApp->openUrl(run_.url);
         break;
     default:
         return;

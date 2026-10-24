@@ -1,9 +1,20 @@
 #include "util.h"
+#include "i18n.h"
 
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
+
+Lang gLang = Lang::En;
+
+std::string trPair(const std::string &s)
+{
+    auto bar = s.find('|');
+    if (bar == std::string::npos)
+        return s;
+    return gLang == Lang::Ru ? s.substr(bar + 1) : s.substr(0, bar);
+}
 
 namespace util
 {
@@ -30,13 +41,13 @@ std::string ago(time_t t, time_t now)
         d = 0;
     char buf[32];
     if (d < 60)
-        snprintf(buf, sizeof(buf), "%ld с", d);
+        snprintf(buf, sizeof(buf), L("%lds", "%ld с"), d);
     else if (d < 3600)
-        snprintf(buf, sizeof(buf), "%ld мин", d / 60);
+        snprintf(buf, sizeof(buf), L("%ld min", "%ld мин"), d / 60);
     else if (d < 86400)
-        snprintf(buf, sizeof(buf), "%ld ч", d / 3600);
+        snprintf(buf, sizeof(buf), L("%ld h", "%ld ч"), d / 3600);
     else
-        snprintf(buf, sizeof(buf), "%ld дн", d / 86400);
+        snprintf(buf, sizeof(buf), L("%ld d", "%ld дн"), d / 86400);
     return buf;
 }
 
@@ -59,7 +70,7 @@ std::string localTime(time_t t)
     struct tm tm {};
     localtime_r(&t, &tm);
     char buf[32];
-    strftime(buf, sizeof(buf), "%d.%m.%y %H:%M", &tm);
+    strftime(buf, sizeof(buf), L("%y-%m-%d %H:%M", "%d.%m.%y %H:%M"), &tm);
     return buf;
 }
 
