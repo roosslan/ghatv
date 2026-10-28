@@ -33,6 +33,7 @@ add_library(ghatv_core STATIC
     src/pulls_window.cpp
     src/pull_window.cpp
     src/issues_window.cpp
+    src/deployments_window.cpp
     src/table.cpp
     src/run_window.cpp
     src/log_window.cpp

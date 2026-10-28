@@ -26,6 +26,8 @@ struct PollerConfig
     std::vector<std::string> exclude;  // исключить репозитории (owner/name или name)
     bool pulls = true;                 // опрашивать открытые pull request'ы
     bool issues = true;                // опрашивать открытые issues
+    bool deployments = true;           // опрашивать развёртывания (GitHub Deployments)
+    int deploymentsPerRepo = 10;
 };
 
 // Фоновый опрос запусков по всем репозиториям
@@ -37,6 +39,7 @@ public:
         std::vector<Run> runs;
         std::vector<PullRequest> pulls;
         std::vector<Issue> issues;
+        std::vector<Deployment> deployments;
         std::string login;
         int repoCount = 0;
         bool reposLoaded = false;
@@ -78,6 +81,7 @@ private:
     std::map<std::string, std::vector<PullRequest>> pulls_;
     std::map<std::string, time_t> lastPullPoll_;
     std::map<std::string, std::vector<Issue>> issues_;
+    std::map<std::string, std::vector<Deployment>> deployments_;
     std::vector<Issue> foreignIssues_;
     time_t lastSearch_ = 0;
     std::string login_;

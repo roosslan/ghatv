@@ -110,3 +110,41 @@ TEST("ghparse::searchIssues: репозиторий из repository_url")
         CHECK_EQ(issues[0].repo, std::string("ghostbsd/issues"));
     CHECK_EQ(ghparse::repoFromUrl("https://ghe.example.com/api/v3/repos/a/b"), std::string("a/b"));
 }
+
+TEST("ghparse::deployments и статусы")
+{
+    const char *body = R"([
+      {"id": 77, "environment": "production", "ref": "v1.2", "sha": "abcdef1234567", "task": "deploy",
+       "description": "release", "creator": {"login": "bot"},
+       "created_at": "2026-10-13T10:00:00Z", "updated_at": "2026-10-13T10:05:00Z"}
+    ])";
+    auto deps = ghparse::deployments(body, "o/r");
+    CHECK_EQ(deps.size(), (size_t) 1);
+    if (!deps.empty())
+    {
+        CHECK_EQ(deps[0].id, (int64_t) 77);
+        CHECK_EQ(deps[0].environment, std::string("production"));
+        CHECK_EQ(deps[0].creator, std::string("bot"));
+        CHECK_EQ(deps[0].repo, std::string("o/r"));
+        CHECK(categoryOf(deps[0]) == RunCategory::Other);  // статусов ещё нет
+    }
+    const char *sts = R"([
+      {"state": "success", "description": "ok", "log_url": "https://github.com/o/r/actions/runs/5",
+       "environment_url": "https://example.com", "created_at": "2026-10-13T10:05:00Z", "creator": {"login": "bot"}},
+      {"state": "in_progress", "target_url": "https://ci.example.com/1", "created_at": "2026-10-13T10:01:00Z"}
+    ])";
+    auto list = ghparse::deploymentStatuses(sts);
+    CHECK_EQ(list.size(), (size_t) 2);
+    if (list.size() == 2)
+    {
+        CHECK_EQ(list[0].logUrl, std::string("https://github.com/o/r/actions/runs/5"));
+        CHECK_EQ(list[1].logUrl, std::string("https://ci.example.com/1"));  // target_url вместо log_url
+        Deployment d;
+        d.last = list[0];
+        CHECK(categoryOf(d) == RunCategory::Success);
+        d.last = list[1];
+        CHECK(categoryOf(d) == RunCategory::Active);
+        d.last.state = "error";
+        CHECK(categoryOf(d) == RunCategory::Failed);
+    }
+}

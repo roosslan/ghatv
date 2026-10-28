@@ -60,6 +60,11 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+      deployments: write
+    # Выпуск релиза отображается как развёртывание в окружение release
+    environment:
+      name: release
+      url: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}
     steps:
       - uses: actions/download-artifact@v8
         with:

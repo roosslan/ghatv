@@ -89,6 +89,32 @@ struct PullDetails
     int changedFiles = 0;
 };
 
+// Статус развёртывания (GitHub Deployments)
+struct DeploymentStatus
+{
+    std::string state;  // success, failure, error, inactive, in_progress, queued, pending
+    std::string description;
+    std::string creator;
+    std::string logUrl;
+    std::string environmentUrl;
+    time_t createdAt = 0;
+};
+
+struct Deployment
+{
+    int64_t id = 0;
+    std::string repo;
+    std::string environment;
+    std::string ref;
+    std::string sha;
+    std::string task;
+    std::string description;
+    std::string creator;
+    time_t createdAt = 0;
+    time_t updatedAt = 0;
+    DeploymentStatus last;  // последний статус; state пустой, если статусов нет
+};
+
 struct Step
 {
     int number = 0;
@@ -135,6 +161,19 @@ inline RunCategory categoryOf(const Run &r)
     if (isFailure(r.conclusion))
         return RunCategory::Failed;
     if (r.conclusion == "success")
+        return RunCategory::Success;
+    return RunCategory::Other;
+}
+
+// Категория развёртывания по последнему статусу
+inline RunCategory categoryOf(const Deployment &d)
+{
+    const std::string &st = d.last.state;
+    if (st == "in_progress" || st == "queued" || st == "pending")
+        return RunCategory::Active;
+    if (st == "failure" || st == "error")
+        return RunCategory::Failed;
+    if (st == "success")
         return RunCategory::Success;
     return RunCategory::Other;
 }
