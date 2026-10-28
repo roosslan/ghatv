@@ -103,6 +103,21 @@ PullRequest parsePull(const json &p, const std::string &repo)
     return pr;
 }
 
+DeploymentStatus parseDeploymentStatus(const json &j)
+{
+    DeploymentStatus st;
+    st.state = str(j, "state");
+    st.description = str(j, "description");
+    st.logUrl = str(j, "log_url");
+    if (st.logUrl.empty())
+        st.logUrl = str(j, "target_url");
+    st.environmentUrl = str(j, "environment_url");
+    st.createdAt = util::parseIso(str(j, "created_at"));
+    if (j.contains("creator") && j["creator"].is_object())
+        st.creator = str(j["creator"], "login");
+    return st;
+}
+
 size_t writeCb(char *ptr, size_t size, size_t nmemb, void *userdata)
 {
     static_cast<std::string *>(userdata)->append(ptr, size * nmemb);
@@ -202,6 +217,41 @@ std::string repoFromUrl(const std::string &url)
     const std::string prefix = "/repos/";
     auto pos = url.find(prefix);
     return pos == std::string::npos ? url : url.substr(pos + prefix.size());
+}
+
+std::vector<Deployment> deployments(const std::string &body, const std::string &repo)
+{
+    std::vector<Deployment> out;
+    auto j = json::parse(body);
+    if (!j.is_array())
+        return out;
+    for (auto &d : j)
+    {
+        Deployment dep;
+        dep.id = num(d, "id");
+        dep.repo = repo;
+        dep.environment = str(d, "environment");
+        dep.ref = str(d, "ref");
+        dep.sha = str(d, "sha");
+        dep.task = str(d, "task");
+        dep.description = str(d, "description");
+        dep.createdAt = util::parseIso(str(d, "created_at"));
+        dep.updatedAt = util::parseIso(str(d, "updated_at"));
+        if (d.contains("creator") && d["creator"].is_object())
+            dep.creator = str(d["creator"], "login");
+        out.push_back(std::move(dep));
+    }
+    return out;
+}
+
+std::vector<DeploymentStatus> deploymentStatuses(const std::string &body)
+{
+    std::vector<DeploymentStatus> out;
+    auto j = json::parse(body);
+    if (j.is_array())
+        for (auto &s : j)
+            out.push_back(parseDeploymentStatus(s));
+    return out;
 }
 
 } // namespace ghparse
@@ -610,6 +660,60 @@ bool GitHub::runsForSha(const std::string &repo, const std::string &sha, std::ve
     try
     {
         out = ghparse::runs(res.body, repo);
+    }
+    catch (const std::exception &e)
+    {
+        err = e.what();
+        return false;
+    }
+    return true;
+}
+
+bool GitHub::listDeployments(const std::string &repo, int perPage, std::vector<Deployment> &out, bool &changed,
+                             std::string &err)
+{
+    changed = false;
+    auto res = request("GET", "/repos/" + repo + "/deployments?per_page=" + std::to_string(perPage), true);
+    if (res.status == 404)
+    {
+        changed = true;
+        out.clear();
+        return true;
+    }
+    if (!res.error.empty())
+    {
+        err = res.error;
+        return false;
+    }
+    if (res.fromCache)
+        return true;
+    try
+    {
+        out = ghparse::deployments(res.body, repo);
+    }
+    catch (const std::exception &e)
+    {
+        err = e.what();
+        return false;
+    }
+    changed = true;
+    return true;
+}
+
+bool GitHub::deploymentStatuses(const std::string &repo, int64_t id, int perPage, std::vector<DeploymentStatus> &out,
+                                std::string &err)
+{
+    auto res = request("GET", "/repos/" + repo + "/deployments/" + std::to_string(id) + "/statuses?per_page=" +
+                                  std::to_string(perPage),
+                       perPage == 1);
+    if (!res.error.empty())
+    {
+        err = res.error;
+        return false;
+    }
+    try
+    {
+        out = ghparse::deploymentStatuses(res.body);
     }
     catch (const std::exception &e)
     {

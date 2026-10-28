@@ -1,4 +1,5 @@
 #define Uses_TObject
+#include "deployments_window.h"
 #include "github.h"
 #include "issues_window.h"
 #include "log_window.h"
@@ -13,6 +14,7 @@
 #include <curl/curl.h>
 
 #include <cstdlib>
+#include <unistd.h>
 #include <deque>
 #include <mutex>
 #include <thread>
@@ -88,6 +90,7 @@ public:
     void openLog(const std::string &repo, int64_t jobId, const std::string &title, const std::string &jump) override;
     void runAction(RunAction a, std::vector<Run> runs, std::function<void(bool)> onDone) override;
     void openPull(const PullRequest &pr) override;
+    void openDeployment(const Deployment &d) override;
     void openUrl(const std::string &url) override;
     void setLanguage(Lang lang);
     void openDiscussion(const std::string &repo, int number, const std::string &title) override;
@@ -98,9 +101,14 @@ private:
     RunsWindow *runs_;
     PullsWindow *pulls_;
     IssuesWindow *issues_;
+    DeploymentsWindow *deployments_;
     std::mutex qm_;
     std::deque<std::function<void()>> queue_;
     uint64_t seenVersion_ = 0;
+    std::string sentUrl_;
+    // Адрес объекта в активном окне (то, что открывает клавиша o)
+    std::string currentObjectUrl() const;
+    void publishUrl();
     time_t lastTick_ = 0;
 };
 
@@ -111,6 +119,8 @@ GhApp::GhApp(GitHub &gh, Poller &poller, std::string startupError) :
 {
     // Окна обращаются к gApp уже при вставке (отрисовка)
     gApp = this;
+    deployments_ = new DeploymentsWindow(deskTop->getExtent());
+    deskTop->insert(deployments_);
     issues_ = new IssuesWindow(deskTop->getExtent());
     deskTop->insert(issues_);
     pulls_ = new PullsWindow(deskTop->getExtent());
@@ -144,6 +154,7 @@ TMenuBar *GhApp::initMenuBar(TRect r)
             *new TMenuItem(L("~R~uns", "~З~апуски"), cmShowRuns, kbNoKey, hcNoContext, "Alt-1") +
             *new TMenuItem(L("~P~ull requests", "Pull ~r~equest'ы"), cmShowPulls, kbNoKey, hcNoContext, "Alt-2") +
             *new TMenuItem("~I~ssues", cmShowIssues, kbNoKey, hcNoContext, "Alt-3") +
+            *new TMenuItem(L("~D~eployments", "Р~а~звёртывания"), cmShowDeployments, kbNoKey, hcNoContext, "Alt-4") +
             *new TMenuItem(L("~N~ext window", "Следующее о~к~но"), cmNextMain, kbF2, hcNoContext, "F2") +
             *new TMenuItem(L("Hide PR ~d~rafts", "Скрыть ~ч~ерновики PR"), cmHideDrafts, kbNoKey, hcNoContext, "D") +
         *new TSubMenu(L("~R~un", "~З~апуск"), kbAltR) +
@@ -177,10 +188,11 @@ TStatusLine *GhApp::initStatusLine(TRect r)
             *new TStatusItem(L("~F7~ Cancel", "~F7~ Отмена"), kbF7, cmCancelRun) +
             *new TStatusItem(L("~F8~ Delete", "~F8~ Удалить"), kbF8, cmDeleteRun) +
             *new TStatusItem(L("~F10~ Menu", "~F10~ Меню"), kbF10, cmMenu) +
-            *new TStatusItem(L("~Ctrl-L~ RU", "~Ctrl-L~ EN"), kbCtrlL, cmToggleLang) +
+            *new TStatusItem(L("~Ctrl-Enter~ Browser", "~Ctrl-Enter~ Браузер"), kbCtrlEnter, cmOpenBrowser) +
             *new TStatusItem(L("~Alt-X~ Exit", "~Alt-X~ Выход"), kbAltX, cmQuit) +
             *new TStatusItem(0, kbShiftF8, cmDeleteLogs) +
             *new TStatusItem(0, kbF9, cmMenu) +
+            *new TStatusItem(0, kbCtrlL, cmToggleLang) +
             *new TStatusItem(0, kbCtrlR, cmRefresh) +
             *new TStatusItem(0, kbCtrlF, cmSearch));
 }
@@ -216,6 +228,7 @@ void GhApp::idle()
     {
         seenVersion_ = v;
         auto st = poller_.snapshot();
+        deployments_->updateData(st);
         issues_->updateData(st);
         pulls_->updateData(st);
         runs_->updateData(std::move(st));
@@ -246,6 +259,8 @@ void GhApp::handleEvent(TEvent &ev)
             pulls_->select();
         else if (deskTop->current == pulls_)
             issues_->select();
+        else if (deskTop->current == issues_)
+            deployments_->select();
         else
             runs_->select();
         break;
@@ -257,6 +272,9 @@ void GhApp::handleEvent(TEvent &ev)
         break;
     case cmShowIssues:
         issues_->select();
+        break;
+    case cmShowDeployments:
+        deployments_->select();
         break;
     case cmRefresh:
         poller_.refreshAll();
@@ -277,8 +295,41 @@ void GhApp::handleEvent(TEvent &ev)
     clearEvent(ev);
 }
 
+std::string GhApp::currentObjectUrl() const
+{
+    TView *v = deskTop->current;
+    if (auto *t = dynamic_cast<TableWindow *>(v))
+        return t->currentUrl();
+    if (auto *r = dynamic_cast<RunWindow *>(v))
+        return r->run().url;
+    if (auto *l = dynamic_cast<LogWindow *>(v))
+        return l->url();
+    if (auto *d = dynamic_cast<DiscussionWindow *>(v))
+        return d->url();
+    if (auto *d = dynamic_cast<DeploymentWindow *>(v))
+        return d->url();
+    return "";
+}
+
+void GhApp::publishUrl()
+{
+    // Странице ttyd сообщается адрес текущего объекта невидимой последовательностью OSC 7766:
+    // по Ctrl+Enter скрипт страницы сразу открывает его в новой вкладке (см. assets/ctrl-enter.html).
+    // Терминалы, которые её не знают, просто игнорируют.
+    std::string url = currentObjectUrl();
+    if (url == sentUrl_)
+        return;
+    sentUrl_ = url;
+    // Пустая строка в OSC до обработчика страницы не доходит, поэтому «адреса нет» передаётся как «-»
+    std::string seq = "\x1b]7766;" + (url.empty() ? std::string("-") : url) + "\x07";
+    ssize_t n = ::write(STDOUT_FILENO, seq.data(), seq.size());
+    (void) n;
+}
+
 void GhApp::getEvent(TEvent &ev)
 {
+    // Предыдущее событие обработано: сообщить странице адрес текущего объекта до ожидания следующего
+    publishUrl();
     TApplication::getEvent(ev);
     // Backspace работает как Esc («назад»), кроме диалогов, где он стирает текст.
     // Диалог может быть и в приложении (inputBox), и на рабочем столе: проверить цепочку текущих
@@ -350,6 +401,11 @@ void GhApp::openUrl(const std::string &url)
         ;
     resume();
     redraw();
+}
+
+void GhApp::openDeployment(const Deployment &d)
+{
+    deskTop->insert(new DeploymentWindow(deskTop->getExtent(), d));
 }
 
 void GhApp::openPull(const PullRequest &pr)
@@ -524,6 +580,7 @@ int main(int argc, char **argv)
     cfg.exclude = util::splitList(util::env("GHATV_EXCLUDE"));
     cfg.pulls = util::envBool("GHATV_PULLS", true);
     cfg.issues = util::envBool("GHATV_ISSUES", true);
+    cfg.deployments = util::envBool("GHATV_DEPLOYMENTS", true);
 
     GitHub gh(token, util::env("GITHUB_API_URL", "https://api.github.com"));
     Poller poller(gh, cfg, [] { TEventQueue::wakeUp(); });

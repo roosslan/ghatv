@@ -152,7 +152,7 @@ void showHelp()
         "/        search (Ctrl+F)\n"
         "l        latest run per workflow and branch\n"
         "s        sort by next column; click a header to sort\n"
-        "F2       next window: runs, PRs, issues (Alt+1/2/3)\n"
+        "F2       next window: runs, PRs, issues, deployments (Alt+1..4)\n"
         "Ctrl+L   language: English / Русский\n"
         "Ctrl+R   refresh everything\n"
         "Esc, Backspace  back / close window",
@@ -168,7 +168,7 @@ void showHelp()
         "/        поиск (Ctrl+F)\n"
         "l        последний запуск workflow и ветки\n"
         "s        сортировка по следующему столбцу; щелчок по заголовку\n"
-        "F2       следующее окно: запуски, PR, issues (Alt+1/2/3)\n"
+        "F2       следующее окно: запуски, PR, issues, развёртывания (Alt+1..4)\n"
         "Ctrl+L   язык: English / Русский\n"
         "Ctrl+R   обновить всё\n"
         "Esc, Backspace  назад / закрыть окно");

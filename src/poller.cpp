@@ -49,6 +49,8 @@ Poller::State Poller::snapshot() const
         s.pulls.insert(s.pulls.end(), kv.second.begin(), kv.second.end());
     for (auto &kv : issues_)
         s.issues.insert(s.issues.end(), kv.second.begin(), kv.second.end());
+    for (auto &kv : deployments_)
+        s.deployments.insert(s.deployments.end(), kv.second.begin(), kv.second.end());
     s.issues.insert(s.issues.end(), foreignIssues_.begin(), foreignIssues_.end());
     s.login = login_;
     s.repoCount = (int) repos_.size();
@@ -171,6 +173,8 @@ void Poller::loadRepos()
                 it = gone(it->first) ? pulls_.erase(it) : std::next(it);
             for (auto it = issues_.begin(); it != issues_.end();)
                 it = gone(it->first) ? issues_.erase(it) : std::next(it);
+            for (auto it = deployments_.begin(); it != deployments_.end();)
+                it = gone(it->first) ? deployments_.erase(it) : std::next(it);
         }
     }
     bump();
@@ -206,7 +210,7 @@ void Poller::pollRepo(const std::string &repo, bool force)
 
     // Pull request'ы и issues меняются реже: опрашиваются с обычным интервалом
     bool pullsDue = false;
-    if (cfg_.pulls || cfg_.issues)
+    if (cfg_.pulls || cfg_.issues || cfg_.deployments)
     {
         std::lock_guard<std::mutex> lock(m_);
         auto it = lastPullPoll_.find(repo);
@@ -231,6 +235,46 @@ void Poller::pollRepo(const std::string &repo, bool force)
         else if (!iok)
         {
             errors_[repo] = "issues: " + ierr;
+            notify = true;
+        }
+    }
+    if (pullsDue && cfg_.deployments)
+    {
+        std::vector<Deployment> list;
+        bool chg = false;
+        std::string derr;
+        bool dok = gh_.listDeployments(repo, cfg_.deploymentsPerRepo, list, chg, derr);
+        if (dok && !chg)
+        {
+            std::lock_guard<std::mutex> lock(m_);
+            list = deployments_[repo];
+        }
+        // Последний статус каждого развёртывания; запросы с ETag, неизменившиеся не расходуют лимит
+        bool statusChanged = false;
+        if (dok)
+            for (auto &d : list)
+            {
+                std::vector<DeploymentStatus> sts;
+                std::string serr;
+                if (gh_.deploymentStatuses(repo, d.id, 1, sts, serr))
+                {
+                    DeploymentStatus last = sts.empty() ? DeploymentStatus{} : sts.front();
+                    if (last.state != d.last.state || last.createdAt != d.last.createdAt)
+                        statusChanged = true;
+                    d.last = last;
+                }
+            }
+        std::lock_guard<std::mutex> lock(m_);
+        if (dok && (chg || statusChanged))
+        {
+            auto &cur = deployments_[repo];
+            if (!(cur.empty() && list.empty()))
+                notify = true;
+            cur = std::move(list);
+        }
+        else if (!dok)
+        {
+            errors_[repo] = "deployments: " + derr;
             notify = true;
         }
     }

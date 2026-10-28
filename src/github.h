@@ -21,6 +21,9 @@ std::vector<Issue> issues(const std::string &body, const std::string &repo);
 std::vector<Issue> searchIssues(const std::string &body);
 // https://api.github.com/repos/owner/name -> owner/name
 std::string repoFromUrl(const std::string &url);
+std::vector<Deployment> deployments(const std::string &body, const std::string &repo);
+// Статусы развёртывания, новые первыми
+std::vector<DeploymentStatus> deploymentStatuses(const std::string &body);
 } // namespace ghparse
 
 struct HttpResponse
@@ -57,6 +60,11 @@ public:
     bool discussion(const std::string &repo, int number, Discussion &out, std::string &err);
     bool pullDetails(const std::string &repo, int number, PullDetails &out, std::string &err);
     bool runsForSha(const std::string &repo, const std::string &sha, std::vector<Run> &out, std::string &err);
+    bool listDeployments(const std::string &repo, int perPage, std::vector<Deployment> &out, bool &changed,
+                         std::string &err);
+    // Статусы развёртывания; perPage = 1 — только последний (с кешем ETag)
+    bool deploymentStatuses(const std::string &repo, int64_t id, int perPage, std::vector<DeploymentStatus> &out,
+                            std::string &err);
     bool getRun(const std::string &repo, int64_t runId, Run &out, std::string &err);
     bool listJobs(const std::string &repo, int64_t runId, std::vector<Job> &out, std::string &err);
     bool annotations(const std::string &repo, int64_t jobId, std::vector<Annotation> &out, std::string &err);

@@ -32,8 +32,9 @@ RUN case "${TARGETARCH:-amd64}" in \
     && chmod +x /usr/local/bin/ttyd
 # Своя страница ttyd: встроенная страница ttyd с заменой значка и заголовка вкладки
 # и скриптом для Ctrl+Enter. Страница берётся у установленного ttyd, поэтому совпадает с его версией.
-# xterm.js отправляет на Ctrl+Enter то же, что на Enter; скрипт вместо этого отправляет код
-# Ctrl+Enter в формате протокола kitty (ESC [13;5u), который tvision распознаёт. Скрипт записан без символов
+# Программа сообщает странице адрес текущего объекта последовательностью OSC 7766, и по Ctrl+Enter
+# скрипт сразу открывает его в новой вкладке. Если адреса нет, скрипт отправляет программе код
+# Ctrl+Enter в формате протокола kitty (ESC [13;5u): xterm.js сам отправил бы обычный Enter. Скрипт записан без символов
 # «\», «&» и «|», чтобы его можно было подставить через sed.
 COPY assets/favicon.png assets/ctrl-enter.html /usr/share/ghatv/
 RUN set -e; \
@@ -48,13 +49,15 @@ RUN set -e; \
     grep -q "$icon" /usr/share/ghatv/index.html; \
     grep -q '<title>ghatv</title>' /usr/share/ghatv/index.html; \
     grep -q '13;5u' /usr/share/ghatv/index.html; \
+    grep -q 'registerOscHandler(7766' /usr/share/ghatv/index.html; \
     rm /tmp/index.html /usr/share/ghatv/ctrl-enter.html; \
     apt-get purge -y curl && apt-get autoremove -y
 COPY --from=build /src/build/ghatv /usr/local/bin/ghatv
 ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
     TERM=xterm-256color \
-    COLORTERM=truecolor
+    COLORTERM=truecolor \
+    GHATV_LANG=en
 EXPOSE 7681
 # --url-arg: язык можно выбрать адресом http://localhost:7681/?arg=--lang=ru
 ENTRYPOINT ["tini", "--", "ttyd", "--writable", "--url-arg", "--port", "7681", \

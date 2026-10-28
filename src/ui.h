@@ -65,6 +65,7 @@ enum : ushort
     cmShowRuns,
     cmShowPulls,
     cmShowIssues,
+    cmShowDeployments,
     cmHideDrafts,
     cmOpenBrowser,
     cmToggleLang,
@@ -132,6 +133,8 @@ public:
     virtual void openUrl(const std::string &url) = 0;
     // Карточка PR: сведения и запуски CI
     virtual void openPull(const PullRequest &pr) = 0;
+    // История статусов развёртывания
+    virtual void openDeployment(const Deployment &d) = 0;
     // Описание и комментарии issue или PR
     virtual void openDiscussion(const std::string &repo, int number, const std::string &title) = 0;
 };
