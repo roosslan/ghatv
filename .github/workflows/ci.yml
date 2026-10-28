@@ -56,7 +56,8 @@ jobs:
 
   publish:
     name: Публикация образа
-    # Из trunk и тегов образ публикуется в ghcr.io как развёртывание в окружение ghcr
+    # Из trunk и тегов образ публикуется в ghcr.io и на Docker Hub как развёртывание в окружение ghcr.
+    # Без секретов DOCKERHUB_USERNAME и DOCKERHUB_TOKEN публикация на Docker Hub пропускается.
     if: github.event_name == 'push'
     needs: test
     runs-on: ubuntu-24.04
@@ -67,6 +68,8 @@ jobs:
     environment:
       name: ghcr
       url: https://github.com/${{ github.repository }}/pkgs/container/ghatv
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
     steps:
       - uses: actions/checkout@v7
 
@@ -79,11 +82,20 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Вход в Docker Hub
+        if: env.DOCKERHUB_USERNAME != ''
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Теги образа
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: |
+            ghcr.io/${{ github.repository }}
+            name=docker.io/${{ secrets.DOCKERHUB_USERNAME }}/ghatv,enable=${{ env.DOCKERHUB_USERNAME != '' }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=semver,pattern={{version}}
@@ -101,3 +113,17 @@ jobs:
             GHATV_VERSION=${{ steps.meta.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Описание на Docker Hub из английского README; относительные ссылки заменяются ссылками на GitHub.
+      # Нужен токен с правами Read, Write, Delete: с меньшими правами шаг завершится ошибкой, но сборку не остановит.
+      - name: Описание на Docker Hub
+        if: env.DOCKERHUB_USERNAME != '' && github.ref == 'refs/heads/trunk'
+        continue-on-error: true
+        uses: peter-evans/dockerhub-description@v5
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ secrets.DOCKERHUB_USERNAME }}/ghatv
+          short-description: GitHub Actions, pull requests, issues and deployments dashboard on Turbo Vision in the browser
+          readme-filepath: ./README.md
+          enable-url-completion: true

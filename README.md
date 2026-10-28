@@ -47,11 +47,13 @@ GH_TOKEN=$(gh auth token) docker compose up -d --build
 
 Then open http://localhost:7681. For the Russian interface, use http://localhost:7681/?arg=--lang=ru (or the `GHATV_LANG=ru` variable).
 
-A prebuilt image from GitHub Container Registry (built by CI from the `trunk` branch and release tags):
+A prebuilt image from Docker Hub or GitHub Container Registry (built by CI from the `trunk` branch and release tags):
 
 ```bash
-docker run -d --name ghatv -p 127.0.0.1:7681:7681 -e GH_TOKEN=$(gh auth token) -e TZ=Europe/Moscow ghcr.io/roosslan/ghatv:latest
+docker run -d --name ghatv -p 127.0.0.1:7681:7681 -e GH_TOKEN=$(gh auth token) -e TZ=Europe/Moscow ruslanche/ghatv:latest
 ```
+
+The same image is available as `ghcr.io/roosslan/ghatv:latest`.
 
 Building the image manually, without compose:
 
