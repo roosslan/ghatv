@@ -8,7 +8,7 @@ turbo-vision панель GitHub Actions по всем репозиториям 
 браузер ──ws──> ttyd ──pty──> ghatv (C++/tvision) ──HTTPS──> api.github.com
 ```
 
-![screenshot](docs/screenshot.gif)
+![screenshot](docs/screenshot.ru.gif)
 
 ## Возможности
 
